@@ -1,0 +1,294 @@
+echo '{% extends "base.html" %}
+{% block head_extra %}
+<style>
+.dashboard-subnav {
+  background: var(--panel-color);
+  border-bottom: 1px solid var(--border-color);
+  padding: 0.75rem 0;
+}
+
+.subnav-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1rem;
+  display: flex;
+  gap: 0;
+  overflow-x: auto;
+}
+
+.subnav-item {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.75rem 1.5rem;
+  text-decoration: none;
+  color: var(--text-muted);
+  font-weight: 500;
+  border-bottom: 3px solid transparent;
+  transition: all 0.3s ease;
+}
+
+.subnav-item:hover {
+  color: var(--accent-color);
+}
+
+.subnav-item.active {
+  color: var(--accent-color);
+  border-bottom-color: var(--accent-color);
+}
+
+.dashboard-section {
+  display: none;
+}
+
+.dashboard-section.active {
+  display: block;
+}
+
+.stat-card {
+  background: var(--panel-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  padding: 1.5rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.stat-card .stat-icon {
+  font-size: 2.5rem;
+  color: var(--accent-color);
+  margin-bottom: 0.5rem;
+}
+
+.stat-card h4 {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.stat-card .value {
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--accent-color);
+  margin: 0;
+}
+
+.stats-horizontal {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.reputation-display {
+  text-align: center;
+}
+
+.score-large {
+  font-size: 3rem;
+  font-weight: 800;
+  color: var(--accent-color);
+  margin-bottom: 1rem;
+}
+
+.rep-breakdown p {
+  margin: 0.5rem 0;
+  color: var(--text-muted);
+}
+
+@media (max-width: 768px) {
+  .stats-horizontal {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+  <div class="dashboard">
+    <!-- Top Navigation Bar -->
+    <nav class="dashboard-nav">
+      <div class="nav-container">
+        <h3 style="margin:0; color: var(--primary-color);">欢迎，{{ current_user.full_name or current_user.username }}</h3>
+        <div class="nav-buttons">
+        </div>
+      </div>
+    </nav>
+
+    <!-- Sub Navigation Bar -->
+    <nav class="dashboard-subnav">
+      <div class="subnav-container">
+        <a href="#main-dashboard" class="subnav-item active">仪表盘</a>
+        <a href="#profile" class="subnav-item">我的资料</a>
+        <a href="#requests" class="subnav-item">我的求助</a>
+        <a href="#offers" class="subnav-item">我的帮助</a>
+        <a href="#reviews" class="subnav-item">我的评价</a>
+        <a href="#reputation" class="subnav-item">信誉评分</a>
+      </div>
+    </nav>
+
+    <div class="dashboard-content">
+      {% set status_labels = {
+        "open": "待匹配",
+        "in_progress": "进行中",
+        "completed": "已完成",
+        "cancelled": "已取消",
+        "pending": "待处理",
+        "accepted": "已接受",
+        "rejected": "已拒绝"
+      } %}
+      <!-- Main Dashboard Stats (shown by default) -->
+      <div id="main-dashboard" class="dashboard-section active">
+        <div class="stats-horizontal">
+          <div class="stat-card">
+            <div class="stat-icon">
+              <i class="fa-solid fa-clipboard-list"></i>
+            </div>
+            <h4>累计发布求助</h4>
+            <div class="value">{{ stats.total_requests }}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">
+              <i class="fa-solid fa-hand-holding-heart"></i>
+            </div>
+            <h4>累计提供帮助</h4>
+            <div class="value">{{ stats.total_offers }}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">
+              <i class="fa-solid fa-star"></i>
+            </div>
+            <h4>当前信誉评分</h4>
+            <div class="value">{{ "%.1f"|format(stats.reputation) }}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">
+              <i class="fa-solid fa-clock"></i>
+            </div>
+            <h4>待处理任务</h4>
+            <div class="value">{{ stats.pending_tasks }}</div>
+          </div>
+        </div>
+
+        <div class="section" id="recent">
+          <h3>最近动态</h3>
+          {% if recent.requests or recent.offers %}
+            <ul>
+              {% for r in recent.requests %}
+                <li><strong>求助：</strong> {{ r.title }} - {{ status_labels.get(r.status, r.status) }}</li>
+              {% endfor %}
+              {% for o in recent.offers %}
+                <li><strong>帮助：</strong> 针对求助 #{{ o.request_id }} - {{ status_labels.get(o.status, o.status) }}</li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="muted">暂无最近动态。</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- My Profile Section -->
+      <div id="profile" class="dashboard-section">
+        <div class="section">
+          <h3>我的资料</h3>
+          <p><strong>姓名：</strong> {{ current_user.full_name or current_user.username }}</p>
+          <p><strong>邮箱：</strong> {{ current_user.email }}</p>
+          {% if current_user.bio %}
+            <p><strong>简介：</strong> {{ current_user.bio }}</p>
+          {% endif %}
+          {% if current_user.skills %}
+            <p><strong>技能：</strong> {{ current_user.skills }}</p>
+          {% endif %}
+          <p><strong>所在地：</strong> {{ current_user.location or "未设置" }}</p>
+          <p><strong>加入时间：</strong> {{ current_user.created_at.strftime("%Y年%m月") }}</p>
+          <div class="actions">
+            <a class="btn" href="{{ url_for("profile_edit") }}">编辑资料</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- My Requests Section -->
+      <div id="requests" class="dashboard-section">
+        <div class="section">
+          <h3>我的求助</h3>
+          {% if recent.requests %}
+            <ul>
+              {% for r in recent.requests %}
+                <li><strong>{{ r.title }}</strong> - {{ status_labels.get(r.status, r.status) }} - {{ r.created_at.strftime("%Y-%m-%d") }}</li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p>暂未发布任何求助</p>
+            <a class="btn btn-spaced" href="{{ url_for("request_help") }}">发布第一条求助</a>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- My Offers Section -->
+      <div id="offers" class="dashboard-section">
+        <div class="section">
+          <h3>我的帮助</h3>
+          {% if recent.offers %}
+            <ul>
+              {% for o in recent.offers %}
+                <li><strong>对求助 #{{ o.request_id }} 提供帮助</strong> - {{ status_labels.get(o.status, o.status) }}</li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p>暂未提供任何帮助</p>
+            <a class="btn btn-spaced" href="{{ url_for("marketplace") }}">浏览可帮助的求助</a>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- My Reviews Section -->
+      <div id="reviews" class="dashboard-section">
+        <div class="section">
+          <h3>我的评价</h3>
+          <p>暂无评价。完成更多任务即可逐步建立你的信誉！</p>
+        </div>
+      </div>
+
+      <!-- Reputation Score Section -->
+      <div id="reputation" class="dashboard-section">
+        <div class="section">
+          <h3>信誉评分</h3>
+          <div class="reputation-display">
+            <div class="score-large">{{ "%.1f"|format(stats.reputation) }}/100</div>
+            <div class="rep-breakdown">
+              <p>已完成任务（求助方）：{{ stats.requests_completed }}</p>
+              <p>已完成任务（帮助方）：{{ stats.helps_completed }}</p>
+              <p>成功率：{{ stats.success_rate }}%</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      const subnavItems = document.querySelectorAll(".subnav-item");
+      const dashboardSections = document.querySelectorAll(".dashboard-section");
+
+      subnavItems.forEach(item => {
+        item.addEventListener("click", function(e) {
+          e.preventDefault();
+          const targetId = this.getAttribute("href").substring(1);
+
+          subnavItems.forEach(nav => nav.classList.remove("active"));
+          this.classList.add("active");
+
+          dashboardSections.forEach(section => section.classList.remove("active"));
+          const targetSection = document.getElementById(targetId);
+          if (targetSection) {
+            targetSection.classList.add("active");
+          }
+        });
+      });
+
+      document.getElementById("main-dashboard").classList.add("active");
+    });
+  </script>
+{% endblock %}' > c:\Users\kavin\Kaspersky-519-WT-05\templates\dashboard.html

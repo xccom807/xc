@@ -1,0 +1,19 @@
+@mixin container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+@mixin card {
+  background: var(--panel-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  padding: 1.5rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+@mixin focus-ring($color) {
+  border-color: $color;
+  box-shadow: 0 0 0 3px rgba($color, 0.2);
+}

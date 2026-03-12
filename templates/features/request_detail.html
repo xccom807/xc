@@ -1,0 +1,159 @@
+{% extends 'base.html' %}
+{% block content %}
+  <div class="grid grid-2">
+    <section class="card">
+      <div class="hero">
+        <h2>{{ req.title }}</h2>
+        <p class="muted">Posted {{ req.created_at.strftime('%Y-%m-%d %H:%M') }} · Category: {{ req.category or 'General' }}</p>
+      </div>
+
+      <div class="request-card__meta" style="margin:.25rem 0 1rem;">
+        {% if req.location %}<span class="tag"><i class="fa-solid fa-location-dot"></i> {{ req.location }}</span>{% endif %}
+        {% if req.time_needed %}<span class="tag"><i class="fa-regular fa-clock"></i> {{ req.time_needed }}</span>{% endif %}
+        {% if req.is_volunteer %}
+          <span class="tag volunteer"><i class="fa-solid fa-hand-holding-heart"></i> Volunteer</span>
+        {% elif req.price is not none %}
+          <span class="tag price"><i class="fa-solid fa-coins"></i> {{ '%.2f'|format(req.price) }}</span>
+        {% endif %}
+        <span class="badge {{ req.status }}">{{ req.status|capitalize }}</span>
+      </div>
+
+      <p>{{ req.description|replace('\n', '<br>')|safe }}</p>
+
+      {% if is_requester %}
+        <div class="section" style="margin-top:1rem;">
+          <h3>收到的帮助申请（{{ all_offers|length }}）</h3>
+          {% if all_offers %}
+            <div class="offers-list">
+              {% for offer in all_offers %}
+                <div class="offer-card {{ offer.status }}">
+                  <div class="offer-head">
+                    <div class="avatar"></div>
+                    <div>
+                      <strong>{{ offer.helper.full_name or offer.helper.username }}</strong>
+                      <div class="muted" style="font-size:.85rem;">{{ offer.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+                      <div class="reputation-badge">Reputation: {{ '%.1f'|format(offer.helper.reputation_score or 0) }}</div>
+                    </div>
+                    <span class="badge {{ offer.status }}">{{ offer.status|capitalize }}</span>
+                  </div>
+                  <p class="offer-message">{{ offer.message|replace('\n', '<br>')|safe }}</p>
+
+                  {% if offer.status == 'pending' %}
+                    <form method="post" style="margin-top: 0.5rem;">
+                      {{ accept_form.hidden_tag() }}
+                      <input type="hidden" name="offer_id" value="{{ offer.id }}">
+                      {{ accept_form.submit(
+                        class='btn btn-small',
+                        value='接受帮助申请',
+                        onclick="return confirm('确认接受该帮助申请吗？其他待处理申请将被拒绝。')"
+                      ) }}
+                    </form>
+                  {% endif %}
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p class="muted">No offers received yet. Helpers will be able to submit offers soon!</p>
+          {% endif %}
+        </div>
+
+        {% if req.status == 'in_progress' %}
+          <div class="section" style="margin-top:1rem;">
+            <h3>任务管理</h3>
+            <p>Your task is currently in progress. Once completed, click the button below to mark it as finished.</p>
+            <form method="post" style="margin-top: 1rem;">
+              {{ complete_form.hidden_tag() }}
+              {{ complete_form.submit(
+                class='btn btn-success',
+                value='标记任务已完成',
+                onclick="return confirm('确认将该任务标记为已完成吗？')"
+              ) }}
+            </form>
+          </div>
+        {% endif %}
+      {% endif %}
+
+      <div class="section" style="margin-top:1rem;">
+        <h3>评价</h3>
+        {% if request_reviews %}
+          <div class="reviews">
+            {% for rv in request_reviews %}
+              <div class="review-card">
+                <div class="review-head">
+                  <div class="avatar"></div>
+                  <div>
+                    <strong>{{ rv.reviewer.full_name or rv.reviewer.username }}</strong>
+                    <div class="stars" aria-label="{{ rv.rating }} stars">
+                      {% for i in range(0, rv.rating) %}<i class="fa-solid fa-star"></i>{% endfor %}
+                      {% for i in range(rv.rating, 5) %}<i class="fa-regular fa-star"></i>{% endfor %}
+                    </div>
+                    <small class="muted">{{ rv.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                  </div>
+                  <span class="badge" style="margin-left:auto;">Verified Task</span>
+                </div>
+                {% if rv.comment %}<p class="muted">{{ rv.comment }}</p>{% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="muted">No reviews for this task yet.</p>
+        {% endif %}
+      </div>
+    </section>
+
+    <aside class="card">
+      <div class="mp-card__head">
+        <div class="avatar"></div>
+        <div>
+          <strong>{{ requester.full_name or requester.username }}</strong>
+          <div class="muted" style="font-size:.85rem;">Reputation: {{ '%.1f'|format(requester.reputation_score or 0) }}</div>
+        </div>
+      </div>
+
+      {% if my_offer %}
+        <div class="flash info" style="margin-top: .75rem;">You already submitted an offer. Current status: <strong>{{ my_offer.status|capitalize }}</strong></div>
+      {% endif %}
+
+      {% if not is_requester %}
+        <h3 style="margin-top:1rem;">提供你的帮助</h3>
+        <form method="post" novalidate>
+          {{ form.hidden_tag() }}
+          <div class="field">
+            <label>Message to requester</label>
+            {{ form.message(class='input', rows='4', placeholder='Explain why you can help...') }}
+            {% for e in form.message.errors %}<div class="flash error">{{ e }}</div>{% endfor %}
+          </div>
+          <div class="field" style="display:flex; align-items:center; gap:.6rem;">
+            {{ form.availability() }} <label style="margin:0">I am available and can start</label>
+          </div>
+          <div class="field">
+            <label>Expected completion timeframe</label>
+            {{ form.timeframe(class='input', placeholder='e.g., within 2 days') }}
+          </div>
+          <div class="actions">
+            {{ form.submit(class='btn', value='Submit Offer') }}
+          </div>
+        </form>
+      {% endif %}
+
+      {% if can_review %}
+        <h3 style="margin-top:1rem;">提交评价</h3>
+        <form method="post" novalidate>
+          {{ review_form.hidden_tag() }}
+          <div class="field">
+            <label>Rating</label>
+            {{ review_form.rating(class='input') }}
+            {% for e in review_form.rating.errors %}<div class="flash error">{{ e }}</div>{% endfor %}
+          </div>
+          <div class="field">
+            <label>Review</label>
+            {{ review_form.comment(class='input', rows='3', placeholder='Share your experience...') }}
+          </div>
+          <div class="actions">
+            {{ review_form.submit(class='btn', value='Submit Review') }}
+          </div>
+        </form>
+      {% endif %}
+    </aside>
+  </div>
+{% endblock %}

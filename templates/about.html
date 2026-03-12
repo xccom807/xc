@@ -1,0 +1,628 @@
+{% extends 'base.html' %}
+{% set title = '关于我们 | 社区互助' %}
+{% block head_extra %}
+  <meta name="description" content="A blockchain-powered platform connecting people who need help with helpers in their community. Trust, transparency, and fair rewards." />
+  <meta property="og:title" content="Building Trust Through Community & Technology" />
+  <meta property="og:description" content="Decentralized task assistance with on-chain reputation and zero commissions." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="{{ request.url_root.rstrip('/') }}{{ url_for('about') }}" />
+  <meta property="og:image" content="{{ url_for('static', filename='img/og-default.png') }}" />
+  <style>
+    .about-container {
+      padding-top: 3rem;
+      padding-bottom: 3rem;
+      max-width: 900px;
+    }
+
+    /* Breadcrumb Navigation */
+    .breadcrumbs {
+      margin-bottom: 2rem;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    .breadcrumbs a {
+      color: var(--text-muted);
+      text-decoration: none;
+      transition: color 0.3s ease;
+    }
+
+    .breadcrumbs a:hover {
+      color: var(--accent-color);
+    }
+
+    .breadcrumbs span {
+      margin: 0 0.5rem;
+    }
+
+    /* Hero Section */
+    .about-hero {
+      margin-bottom: 4rem;
+    }
+
+    .hero-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 2rem;
+      margin-bottom: 2rem;
+    }
+
+    .hero-main {
+      flex: 1;
+    }
+
+    .hero-main h1 {
+      font-size: 3rem;
+      font-weight: 800;
+      margin-bottom: 1.5rem;
+      line-height: 1.2;
+      color: var(--text-color);
+    }
+
+    .hero-subtitle {
+      font-size: 1.2rem;
+      color: var(--text-muted);
+      margin-bottom: 2rem;
+      line-height: 1.6;
+      max-width: 600px;
+    }
+
+    .hero-cta .btn {
+      margin-bottom: 3rem;
+      padding: 1rem 2rem;
+      font-size: 1.1rem;
+    }
+
+    .hero-learn-more {
+      align-self: flex-start;
+    }
+
+    /* Content Sections */
+    .about-section {
+      background: var(--panel-color);
+      border: 1px solid var(--border-color);
+      border-radius: var(--border-radius);
+      padding: 2.5rem;
+      margin-bottom: 3rem;
+      transition: all 0.3s ease;
+    }
+
+    .about-section:hover {
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+      transform: translateY(-2px);
+    }
+
+    .section-heading {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 1.5rem;
+      margin-top: 0;
+      color: var(--text-color);
+    }
+
+    .section-text {
+      line-height: 1.8;
+      margin-bottom: 1.25rem;
+      max-width: 800px;
+      color: var(--text-color);
+      font-size: 1rem;
+    }
+
+    .mission-statement {
+      font-style: italic;
+      font-size: 1.1rem;
+      line-height: 1.7;
+      color: var(--text-color);
+      background: rgba(59, 130, 246, 0.05);
+      border-left: 4px solid var(--accent-color);
+      padding: 1.5rem;
+      margin: 2rem 0;
+      border-radius: 0 var(--border-radius) var(--border-radius) 0;
+    }
+
+    /* Steps Grid */
+    .about-steps {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 2rem;
+      margin-top: 2rem;
+    }
+
+    .step {
+      text-align: center;
+      padding: 1.5rem;
+    }
+
+    .step-icon {
+      width: 80px;
+      height: 80px;
+      background: linear-gradient(135deg, var(--accent-color), var(--accent2-color));
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 1.5rem;
+      font-size: 2rem;
+      color: white;
+    }
+
+    .step h3 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      color: var(--text-color);
+    }
+
+    .step p {
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    /* Features Grid */
+    .about-features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 2rem;
+      margin-top: 2rem;
+    }
+
+    .feature {
+      text-align: center;
+      padding: 1.5rem;
+    }
+
+    .feature i {
+      font-size: 3rem;
+      color: var(--accent-color);
+      margin-bottom: 1rem;
+    }
+
+    .feature h3 {
+      font-size: 1.2rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      color: var(--text-color);
+    }
+
+    .feature p {
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    /* Stats Section */
+    .about-stats {
+      display: flex;
+      justify-content: space-around;
+      margin-top: 3rem;
+      padding: 2rem;
+      background: rgba(59, 130, 246, 0.05);
+      border-radius: var(--border-radius);
+    }
+
+    .stat {
+      text-align: center;
+    }
+
+    .stat .num {
+      display: block;
+      font-size: 2.5rem;
+      font-weight: 800;
+      color: var(--accent-color);
+    }
+
+    .stat .label {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+
+    /* Actions Grid */
+    .actions-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 2rem;
+      margin-top: 2rem;
+    }
+
+    .action {
+      text-align: center;
+      padding: 2rem;
+      background: rgba(59, 130, 246, 0.02);
+      border-radius: var(--border-radius);
+    }
+
+    .action h3 {
+      font-size: 1.3rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      color: var(--text-color);
+    }
+
+    .action p {
+      color: var(--text-muted);
+      margin-bottom: 1.5rem;
+      line-height: 1.6;
+    }
+
+    /* Tech Icons */
+    .tech-icons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin: 2rem 0;
+    }
+
+    .tech-icons span {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.25rem;
+      background: var(--panel-color);
+      border: 1px solid var(--border-color);
+      border-radius: 25px;
+      font-size: 0.9rem;
+      color: var(--text-color);
+    }
+
+    .tech-icons i {
+      color: var(--accent-color);
+    }
+
+    /* Values Grid */
+    .values-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 2rem;
+      margin-top: 2rem;
+    }
+
+    .value {
+      text-align: center;
+      padding: 1.5rem;
+    }
+
+    .value h3 {
+      font-size: 1.2rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      color: var(--accent-color);
+    }
+
+    .value p {
+      color: var(--text-muted);
+      line-height: 1.6;
+      font-size: 0.9rem;
+    }
+
+    /* CTA Section */
+    .about-cta {
+      text-align: center;
+      padding: 3rem 2rem;
+      background: linear-gradient(135deg, #1e3a8a, #1e40af);
+      color: white;
+      margin-top: 4rem;
+    }
+
+    .about-cta h2 {
+      color: white;
+      margin-bottom: 2rem;
+      font-size: 2.2rem;
+    }
+
+    .about-cta .btn {
+      background: white;
+      color: #1e3a8a;
+      font-weight: 600;
+      padding: 1rem 2rem;
+      border: none;
+    }
+
+    .about-cta .btn:hover {
+      background: rgba(255, 255, 255, 0.9);
+      transform: translateY(-2px);
+      color: #1e3a8a;
+    }
+
+    /* Responsive Design */
+    @media (max-width: 768px) {
+      .about-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+      }
+
+      .hero-content {
+        flex-direction: column;
+        text-align: center;
+      }
+
+      .hero-main h1 {
+        font-size: 2.2rem;
+      }
+
+      .hero-subtitle {
+        font-size: 1.1rem;
+      }
+
+      .hero-buttons {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: stretch;
+      }
+
+      .about-section {
+        padding: 1.5rem;
+      }
+
+      .section-heading {
+        font-size: 1.6rem;
+      }
+
+      .about-stats {
+        flex-direction: column;
+        gap: 2rem;
+      }
+
+      .actions-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .values-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .about-features {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .hero-main h1 {
+        font-size: 1.8rem;
+      }
+
+      .values-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  <div class="container about-container">
+    <!-- Breadcrumbs -->
+    <nav class="breadcrumbs">
+      <a href="{{ url_for('index') }}">首页</a>
+      <span>›</span>
+      <span>关于我们</span>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="about-hero">
+      <div class="hero-content">
+        <div class="hero-main">
+          <h1>以社区与技术构建信任</h1>
+          <p class="hero-subtitle"> 我吹牛逼</p>
+          <div class="hero-buttons" style="display: flex; gap: 1.5rem; align-items: center; margin-top: 2.5rem;">
+            <a class="btn" href="{{ url_for('signup') }}">立即开始</a>
+            <a class="btn secondary" href="#how-it-works">了解更多</a>
+          </div>
+      </div>
+    </section>
+
+    <!-- Our Story -->
+    <section class="about-section" id="our-story">
+      <h2 class="section-heading">我们的故事</h2>
+      <p class="section-text">我们的平台源于一个信念：每个社区都蕴藏着尚未被激发的互助潜力。我们连接日常生活中需要帮助的人与愿意伸出援手的邻里。</p>
+      <p class="section-text">传统互助体系常常存在费用高、评价造假、信任不足等问题。我们希望提供更好的方式——以社区为先、默认透明，并由去中心化技术驱动。</p>
+      <div class="mission-statement">我们的使命：<em>打造一个透明、可信的互助生态，让求助更易获得，让贡献得到公平回报，让每次互动都积累长期的社区纽带。</em></div>
+    </section>
+
+    <!-- How It Works -->
+    <section class="about-section" id="how-it-works">
+      <h2 class="section-heading">运作方式</h2>
+      <div class="about-steps">
+        <div class="step">
+          <div class="step-icon"><i class="fa-regular fa-id-card"></i></div>
+          <h3>注册并连接</h3>
+          <p>创建账户并连接数字钱包，完善你的技能与兴趣资料。</p>
+        </div>
+        <div class="step">
+          <div class="step-icon"><i class="fa-solid fa-list-check"></i></div>
+          <h3>发布或浏览任务</h3>
+          <p>需要帮助时，发布包含详情与报酬的求助；想帮助他人时，浏览你附近的任务。</p>
+        </div>
+        <div class="step">
+          <div class="step-icon"><i class="fa-solid fa-handshake"></i></div>
+          <h3>对接并完成</h3>
+          <p>与求助者或帮助者完成匹配，通过清晰沟通推进任务，区块链会记录每一次互动。</p>
+        </div>
+        <div class="step">
+          <div class="step-icon"><i class="fa-solid fa-star"></i></div>
+          <h3>建立信誉</h3>
+          <p>任务完成后获得可验证评价，持续积累链上信誉分，赢得更多信任与机会。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Why Choose Us -->
+    <section class="about-section" id="why">
+      <h2 class="section-heading">为什么选择我们</h2>
+      <div class="about-features">
+        <div class="feature">
+          <i class="fa-solid fa-certificate"></i>
+          <h3>区块链可信验证</h3>
+          <p>每次任务完成都会记录到不可篡改账本，有效减少虚假评价。</p>
+        </div>
+        <div class="feature">
+          <i class="fa-solid fa-percent"></i>
+          <h3>零平台佣金</h3>
+          <p>通过加密货币点对点支付，帮助者可保留 100% 收益。</p>
+        </div>
+        <div class="feature">
+          <i class="fa-solid fa-people-arrows"></i>
+          <h3>双重支付模式</h3>
+          <p>同时支持付费互助与免费志愿服务，打造更包容的社区生态。</p>
+        </div>
+        <div class="feature">
+          <i class="fa-solid fa-file-contract"></i>
+          <h3>智能合约保障</h3>
+          <p>自动托管与自动放款机制，保障交易公平可靠。</p>
+        </div>
+        <div class="feature">
+          <i class="fa-regular fa-star"></i>
+          <h3>透明信誉体系</h3>
+          <p>信誉评分基于可验证任务历史，具备防篡改能力。</p>
+        </div>
+        <div class="feature">
+          <i class="fa-solid fa-location-dot"></i>
+          <h3>聚焦本地社区</h3>
+          <p>连接附近邻里，获得更快捷、更便利的互助体验。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Our Vision -->
+    <section class="about-section" id="vision">
+      <h2 class="section-heading">我们的愿景</h2>
+      <p class="section-text">我们希望构建一个互助融入日常生活的世界：借助无需中介也能建立信任的技术，让帮助触手可及。通过把区块链透明性与人与人之间的善意结合起来，我们正在打造一个可持续、可信、可回报的社区互助网络。</p>
+      <div class="about-stats">
+        <div class="stat"><span class="num">10,000+</span><span class="label">社区帮助者</span></div>
+        <div class="stat"><span class="num">50,000+</span><span class="label">已完成任务</span></div>
+        <div class="stat"><span class="num">95%</span><span class="label">满意度</span></div>
+      </div>
+    </section>
+
+    <!-- What You Can Do -->
+    <section class="about-section" id="actions">
+      <h2 class="section-heading">你可以做什么</h2>
+      <div class="actions-grid">
+        <div class="action">
+          <h3>需要帮助？</h3>
+          <p>搬运家具、做饭、家教辅导、跑腿代办、宠物照护、技术支持、园艺维护、家庭维修</p>
+          <a class="btn" href="{{ url_for('request_help') }}">发布求助</a>
+        </div>
+        <div class="action">
+          <h3>想要帮忙？</h3>
+          <p>教学辅导、烹饪、重物搬运、技术协助、交通接送、老人照护、儿童看护、语言翻译</p>
+          <a class="btn" href="{{ url_for('marketplace') }}">浏览任务</a>
+        </div>
+        <div class="action">
+          <h3>支持公益</h3>
+          <p>公益组织合作、志愿行动、社区清洁、教育倡议、环保项目</p>
+          <a class="btn" href="{{ url_for('volunteer') }}">寻找机会</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Technology Stack -->
+    <section class="about-section" id="tech">
+      <h2 class="section-heading">技术栈</h2>
+      <p class="section-text">基于 Core 区块链构建，兼顾安全与透明。</p>
+      <div class="tech-icons">
+        <span><i class="fa-brands fa-python"></i> Python</span>
+        <span><i class="fa-solid fa-flask"></i> Flask</span>
+        <span><i class="fa-brands fa-ethereum"></i> Core/EVM</span>
+        <span><i class="fa-solid fa-file-contract"></i> 智能合约</span>
+        <span><i class="fa-solid fa-database"></i> IPFS</span>
+      </div>
+      <p class="section-text">去中心化架构保障数据安全、交易透明，平台不受单一主体控制。</p>
+    </section>
+
+    <!-- Community Values -->
+    <section class="about-section" id="values">
+      <h2 class="section-heading">社区价值观</h2>
+      <div class="values-grid">
+        <div class="value"><h3>信任</h3><p>区块链验证确保互动真实可靠。</p></div>
+        <div class="value"><h3>公平</h3><p>无隐藏费用、无中间商，回报公开透明。</p></div>
+        <div class="value"><h3>包容</h3><p>免费志愿服务让每个人都能获得帮助。</p></div>
+        <div class="value"><h3>透明</h3><p>每笔交互都可在链上追踪与验证。</p></div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="about-section" id="faq">
+      <h2 class="section-heading">常见问题</h2>
+      <div class="faq">
+        {% set faqs = [
+          ("什么是区块链，它为什么重要？", "区块链是分布式账本，具备透明和不可篡改特性，可在无需中心化中介的情况下建立信任。"),
+          ("帮助他人后如何获得报酬？", "你可以直接接收加密货币付款。后续可通过智能合约托管并在任务完成后自动放款。"),
+          ("与平台上的人线下见面安全吗？", "建议优先选择公共场所见面，先核验对方资料，并通过站内沟通工具协调细节。"),
+          ("如果任务没有被妥善完成怎么办？", "用户可提交真实且可验证的评价；争议可通过社区审核与智能合约规则处理。"),
+          ("信誉分是如何计算的？", "基于可验证评价、任务历史和质量信号综合计算，分数具备防篡改能力并与链上记录关联。"),
+          ("我可以免费做志愿服务吗？", "可以。你可以把任务设置为志愿模式，也可以无偿提供帮助。"),
+          ("平台会收取哪些费用？", "当前目标是零佣金；后续可能提供可选的增值服务。"),
+          ("如何举报有问题的用户？", "可在求助或用户资料页使用举报功能，所有标记内容会进入审核流程。")
+        ] %}
+        {% for q, a in faqs %}
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false"><i class="fa-regular fa-circle-question"></i> {{ q }}</button>
+            <div class="faq-a">{{ a }}</div>
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <!-- Team / Contact -->
+    <section class="about-section" id="team">
+      <h2 class="section-heading">团队与联系</h2>
+      <div class="grid grid-3 team-grid">
+        <div class="member"><div class="avatar"></div><h3>卡文·克里希南</h3><p class="muted">主开发者</p></div>
+        <div class="member placeholder" style="opacity: 0.3;"><div class="avatar"></div><h3>成员姓名</h3><p class="muted">角色</p></div>
+        <div class="member placeholder" style="opacity: 0.3;"><div class="avatar"></div><h3>成员姓名</h3><p class="muted">角色</p></div>
+      </div>
+      <div class="contact">
+        <p>有任何问题？欢迎随时联系我们！</p>
+        <p>邮箱：<a href="mailto:support@example.com">support@example.com</a> · 社交：<a href="#">Twitter</a> · <a href="#">Discord</a></p>
+      </div>
+    </section>
+
+    <!-- CTA Banner -->
+    <section class="about-cta card">
+      <h2>准备在你的社区创造改变吗？</h2>
+      <div class="actions">
+        <a class="btn" href="{{ url_for('signup') }}">立即开始</a>
+      </div>
+    </section>
+  </div>
+
+  <!-- Back to top -->
+  <button id="backToTop" class="back-to-top" aria-label="返回顶部"><i class="fa-solid fa-arrow-up"></i></button>
+
+  <!-- Page scripts: smooth scroll, reveal on scroll, FAQ accordion, back-to-top -->
+  <script>
+  (function(){
+    // Smooth internal anchor links
+    document.querySelectorAll('a[href^="#"]').forEach(a => {
+      a.addEventListener('click', (e) => {
+        const id = a.getAttribute('href');
+        if(id && id.length > 1){ e.preventDefault(); document.querySelector(id)?.scrollIntoView({behavior:'smooth'}); }
+      });
+    });
+
+    // Reveal on scroll
+    const revealEls = document.querySelectorAll('.about-section');
+    const obs = new IntersectionObserver((entries)=>{
+      entries.forEach(en=>{ if(en.isIntersecting){ en.target.classList.add('in'); obs.unobserve(en.target); } });
+    }, {threshold: 0.15});
+    revealEls.forEach(el=>obs.observe(el));
+
+    // FAQ accordion
+    document.querySelectorAll('.faq-item .faq-q').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const exp = btn.getAttribute('aria-expanded') === 'true';
+        btn.setAttribute('aria-expanded', String(!exp));
+        const ans = btn.nextElementSibling;
+        if(ans){ ans.style.maxHeight = !exp ? (ans.scrollHeight + 'px') : '0px'; }
+      });
+    });
+
+    // Back to top
+    const back = document.getElementById('backToTop');
+    window.addEventListener('scroll', ()=>{
+      back.classList.toggle('show', window.scrollY > 500);
+    });
+    back.addEventListener('click', ()=> window.scrollTo({top:0, behavior:'smooth'}));
+  })();
+  </script>
+{% endblock %}

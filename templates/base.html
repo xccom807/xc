@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ title or '每日互助' }}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha512-SxZl1c2L3e3Qp2bQ6l3n3FQb3JQjGQm0r6qg4jKp3Yl1k1eZsVZJf1l9m1z2e6lLQy2p5cJwEJYM1o9rj3pQjw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}" />
+    <style>
+      .wallet-connect {
+        background: linear-gradient(135deg, #3b82f6, #1d4ed8) !important;
+        color: white !important;
+        border: 2px solid #3b82f6 !important;
+        border-radius: 8px !important;
+        padding: 0.75rem 1.5rem !important;
+        font-weight: 600 !important;
+        transition: all 0.3s ease !important;
+        box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3) !important;
+      }
+
+      .offer-card {
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        background: var(--bg-color);
+      }
+
+      .offer-card.pending {
+        border-left: 4px solid #ffa500;
+      }
+
+      .offer-card.accepted {
+        border-left: 4px solid #28a745;
+      }
+
+      .offer-card.rejected {
+        border-left: 4px solid #dc3545;
+        opacity: 0.7;
+      }
+
+      .offer-card.completed {
+        border-left: 4px solid #007bff;
+      }
+
+      .offer-head {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 0.75rem;
+      }
+
+      .offer-message {
+        color: var(--text-muted);
+        font-size: 0.9rem;
+        line-height: 1.4;
+        margin-bottom: 0.75rem;
+      }
+
+      .reputation-badge {
+        background: var(--accent-color);
+        color: white;
+        padding: 0.25rem 0.5rem;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        display: inline-block;
+        margin-top: 0.25rem;
+      }
+
+      .btn-small {
+        padding: 0.5rem 1rem;
+        font-size: 0.85rem;
+      }
+
+      .btn-success {
+        background: #28a745;
+        color: white;
+        border: none;
+      }
+
+      .btn-success:hover {
+        background: #218838;
+      }
+
+      .offers-list {
+        max-height: 400px;
+        overflow-y: auto;
+      }
+    </style>
+    {% block head_extra %}{% endblock %}
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container">
+        <div class="brand">
+          <span class="dot"></span>
+          <h1 style="margin:0; font-size:1.25rem;"><a href="/">每日互助</a></h1>
+        </div>
+
+        <div style="text-align: center; flex: 1;">
+          <h2 style="margin: 0; font-size: 1.25rem; color: var(--accent-color); font-weight: 600;">团队名称：xccom</h2>
+        </div>
+
+        <div class="header-actions">
+        </div>
+
+        <nav class="nav-links" id="nav">
+          <a href="{{ url_for('index') }}"><i class="fa-solid fa-house"></i> Home</a>
+          <a href="{{ url_for('about') }}"><i class="fa-regular fa-circle-question"></i> About</a>
+          <a href="{{ url_for('connect_wallet') }}" class="wallet-connect"><i class="fa-solid fa-wallet"></i> Connect Wallet</a>
+          {% if current_user.is_authenticated %}
+            <a href="{{ url_for('dashboard') }}"><i class="fa-regular fa-user"></i> Dashboard</a>
+            {% if current_user.username == 'admin' and current_user.email == 'admin@dailyhelper.com' %}
+              <a href="{{ url_for('admin') }}"><i class="fa-solid fa-shield"></i> Admin</a>
+              <a href="{{ url_for('blockchain_blocks') }}"><i class="fa-solid fa-cube"></i> Blockchain</a>
+            {% endif %}
+            <a href="{{ url_for('logout') }}"><i class="fa-solid fa-right-from-brain"></i> Logout</a>
+          {% else %}
+            <a href="{{ url_for('login') }}"><i class="fa-solid fa-right-to-bracket"></i> Login</a>
+            <a href="{{ url_for('signup') }}"><i class="fa-regular fa-id-card"></i> Sign Up</a>
+          {% endif %}
+        </nav>
+      </div>
+    </header>
+
+    <main class="container">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="flashes">
+            {% for category, message in messages %}
+              <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="site-footer">
+      <div class="container">
+        <div class="grid grid-2">
+          <div>
+            <strong>DailyHelper</strong>
+            <p class="muted">A community help platform demo.</p>
+          </div>
+          <div>
+            <p><a href="{{ url_for('about') }}">About</a> · <a href="https://flask.palletsprojects.com/" target="_blank" rel="noopener">Flask</a></p>
+            <small>&copy; {{ 2025 }} DailyHelper</small>
+            <p style="margin-top: 0.5rem;">
+              <strong>Developer's Connect:</strong> 
+              <a href="https://www.linkedin.com/in/kavin-krishnan-c-72024k" target="_blank" rel="noopener" style="color: var(--accent-color);">Kavin Krishnan C</a>
+            </p>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  </body>
+</html>
