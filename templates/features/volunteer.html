@@ -2,11 +2,11 @@
 {% block content %}
   <section class="vol-hero card">
     <h2>志愿服务机会</h2>
-    <p class="muted">Make a difference. Browse free community requests and lend a helping hand.</p>
+    <p class="muted">创造改变。浏览社区免费需求并伸出援手。</p>
     <div class="vol-stats">
-      <div class="vol-stat"><span class="num">{{ stats.est_hours }}</span><span class="label">Estimated Hours Contributed</span></div>
-      <div class="vol-stat"><span class="num">{{ stats.people_helped }}</span><span class="label">People Helped</span></div>
-      <div class="vol-stat"><span class="num">{{ stats.active_volunteers }}</span><span class="label">Active Volunteers</span></div>
+      <div class="vol-stat"><span class="num">{{ stats.est_hours }}</span><span class="label">预估贡献时长</span></div>
+      <div class="vol-stat"><span class="num">{{ stats.people_helped }}</span><span class="label">已帮助人数</span></div>
+      <div class="vol-stat"><span class="num">{{ stats.active_volunteers }}</span><span class="label">活跃志愿者</span></div>
     </div>
   </section>
 
@@ -15,51 +15,51 @@
       <h3 style="margin-top:0;">寻找公益方向</h3>
       <form method="get">
         <div class="field">
-          <label>Category</label>
+          <label>分类</label>
           <select class="input" name="category">
-            <option value="">All</option>
+            <option value="">全部</option>
             {% for c in categories %}
               <option value="{{ c }}" {% if filters.category == c %}selected{% endif %}>{{ c }}</option>
             {% endfor %}
           </select>
         </div>
         <div class="field">
-          <label>Location</label>
-          <input class="input" type="text" name="location" value="{{ filters.location }}" placeholder="City/Area" />
+          <label>位置</label>
+          <input class="input" type="text" name="location" value="{{ filters.location }}" placeholder="城市/区域" />
         </div>
         <div class="grid grid-2">
           <div class="field">
-            <label>Start Date</label>
+            <label>开始日期</label>
             <input class="input" type="date" name="start_date" value="{{ filters.start_date }}" />
           </div>
           <div class="field">
-            <label>End Date</label>
+            <label>结束日期</label>
             <input class="input" type="date" name="end_date" value="{{ filters.end_date }}" />
           </div>
         </div>
         <div class="field">
-          <label>Sort by</label>
+          <label>排序方式</label>
           <select class="input" name="sort">
-            <option value="newest" {% if filters.sort == 'newest' %}selected{% endif %}>Newest</option>
-            <option value="oldest" {% if filters.sort == 'oldest' %}selected{% endif %}>Oldest</option>
+            <option value="newest" {% if filters.sort == 'newest' %}selected{% endif %}>最新</option>
+            <option value="oldest" {% if filters.sort == 'oldest' %}selected{% endif %}>最旧</option>
           </select>
         </div>
         <div class="actions">
-          <button class="btn" type="submit"><i class="fa-solid fa-filter"></i> Apply</button>
-          <a class="btn secondary" href="{{ url_for('volunteer') }}">Reset</a>
+          <button class="btn" type="submit"><i class="fa-solid fa-filter"></i> 应用</button>
+          <a class="btn secondary" href="{{ url_for('volunteer') }}">重置</a>
         </div>
       </form>
 
       <div class="cta">
-        <h4>Become a Volunteer</h4>
-        <p class="muted">Join our community of helpers. Share your skills, build connections, and create impact.</p>
-        <a class="btn" href="{{ url_for('signup') }}"><i class="fa-solid fa-hands-holding-heart"></i> Get Started</a>
+        <h4>成为志愿者</h4>
+        <p class="muted">加入我们的互助社区。分享技能，建立连接，创造影响。</p>
+        <a class="btn" href="{{ url_for('signup') }}"><i class="fa-solid fa-hands-holding-heart"></i> 立即开始</a>
       </div>
 
       <div class="testimonials">
-        <h4>What volunteers say</h4>
-        <div class="card"><em>“Helping at the weekend cleanup was fulfilling and fun!”</em></div>
-        <div class="card"><em>“I met wonderful people while tutoring students.”</em></div>
+        <h4>志愿者心声</h4>
+        <div class="card"><em>“在周末清洁活动中帮忙既充实又有趣！”</em></div>
+        <div class="card"><em>“在辅导学生时我遇到了很棒的人。”</em></div>
       </div>
     </aside>
 
@@ -74,13 +74,13 @@
               <h3>{{ r.title }}</h3>
               <p class="muted">{{ r.description[:140] }}{% if r.description|length > 140 %}...{% endif %}</p>
               <div class="mp-card__meta">
-                <span class="tag"><i class="fa-regular fa-folder"></i> {{ r.category or 'General' }}</span>
+                <span class="tag"><i class="fa-regular fa-folder"></i> {{ r.category or '未分类' }}</span>
                 {% if r.location %}<span class="tag"><i class="fa-solid fa-location-dot"></i> {{ r.location }}</span>{% endif %}
                 {% if r.time_needed %}<span class="tag"><i class="fa-regular fa-clock"></i> {{ r.time_needed }}</span>{% endif %}
-                <span class="tag volunteer"><i class="fa-solid fa-hand-holding-heart"></i> Volunteer</span>
+                <span class="tag volunteer"><i class="fa-solid fa-hand-holding-heart"></i> 志愿服务</span>
               </div>
               <div class="actions">
-                <a class="btn" href="{{ url_for('request_detail', request_id=r.id) }}">Offer Help</a>
+                <a class="btn" href="{{ url_for('request_detail', request_id=r.id) }}">提供帮助</a>
               </div>
             </div>
           {% endfor %}
@@ -97,13 +97,13 @@
               <h3>{{ r.title }}</h3>
               <p class="muted">{{ r.description[:160] }}{% if r.description|length > 160 %}...{% endif %}</p>
               <div class="mp-card__meta">
-                <span class="tag"><i class="fa-regular fa-folder"></i> {{ r.category or 'General' }}</span>
+                <span class="tag"><i class="fa-regular fa-folder"></i> {{ r.category or '未分类' }}</span>
                 {% if r.location %}<span class="tag"><i class="fa-solid fa-location-dot"></i> {{ r.location }}</span>{% endif %}
                 {% if r.time_needed %}<span class="tag"><i class="fa-regular fa-clock"></i> {{ r.time_needed }}</span>{% endif %}
-                <span class="tag volunteer"><i class="fa-solid fa-hand-holding-heart"></i> Volunteer</span>
+                <span class="tag volunteer"><i class="fa-solid fa-hand-holding-heart"></i> 志愿服务</span>
               </div>
               <div class="actions">
-                <a class="btn" href="{{ url_for('request_detail', request_id=r.id) }}">Offer Help</a>
+                <a class="btn" href="{{ url_for('request_detail', request_id=r.id) }}">提供帮助</a>
               </div>
             </div>
           {% endfor %}
@@ -111,20 +111,20 @@
 
         <div class="pagination">
           {% if pagination.has_prev %}
-            <a class="btn secondary" href="{{ url_for('volunteer', page=pagination.prev_num, **filters) }}">Previous</a>
+            <a class="btn secondary" href="{{ url_for('volunteer', page=pagination.prev_num, **filters) }}">上一页</a>
           {% else %}
-            <span class="btn secondary" style="opacity:.6; pointer-events:none;">Previous</span>
+            <span class="btn secondary" style="opacity:.6; pointer-events:none;">上一页</span>
           {% endif %}
-          <span class="muted">Page {{ pagination.page }} of {{ pagination.pages }}</span>
+          <span class="muted">第 {{ pagination.page }} 页，共 {{ pagination.pages }} 页</span>
           {% if pagination.has_next %}
-            <a class="btn secondary" href="{{ url_for('volunteer', page=pagination.next_num, **filters) }}">Next</a>
+            <a class="btn secondary" href="{{ url_for('volunteer', page=pagination.next_num, **filters) }}">下一页</a>
           {% else %}
-            <span class="btn secondary" style="opacity:.6; pointer-events:none;">Next</span>
+            <span class="btn secondary" style="opacity:.6; pointer-events:none;">下一页</span>
           {% endif %}
         </div>
       {% else %}
         <div class="card" style="margin-top:1rem;">
-          <p class="muted">No volunteer requests found. Check back soon or broaden your filters.</p>
+          <p class="muted">未找到志愿服务需求。请稍后再来或放宽筛选条件。</p>
         </div>
       {% endif %}
     </section>

@@ -84,7 +84,7 @@ def create_app() -> Flask:
         @wraps(view_func)
         def _wrapped(*args, **kwargs):
             if not current_user.is_authenticated or getattr(current_user, "user_type", "user") != "admin":
-                flash("Admin access required.", "error")
+                flash("需要管理员权限。", "error")
                 return redirect(url_for("dashboard"))
             return view_func(*args, **kwargs)
         return _wrapped
@@ -190,10 +190,10 @@ def create_app() -> Flask:
             existing_email = User.query.filter_by(email=form.email.data.lower()).first()
             existing_user = User.query.filter_by(username=form.username.data).first()
             if existing_email:
-                flash("Email already registered.", "error")
+                flash("该邮箱已被注册。", "error")
                 return render_template("auth/signup.html", form=form)
             if existing_user:
-                flash("Username already taken.", "error")
+                flash("该用户名已被占用。", "error")
                 return render_template("auth/signup.html", form=form)
 
             user = User(
@@ -219,7 +219,7 @@ def create_app() -> Flask:
                 maybe_seal_block()
             except Exception:  # noqa: BLE001
                 pass
-            flash("Account created. Please log in.", "success")
+            flash("账号创建成功，请登录。", "success")
             return redirect(url_for("login"))
 
         # If POST with errors, surface them
@@ -252,9 +252,9 @@ def create_app() -> Flask:
                     maybe_seal_block()
                 except Exception:  # noqa: BLE001
                     pass
-                flash("Logged in successfully.", "success")
+                flash("登录成功。", "success")
                 return redirect(url_for("post_login_redirect"))
-            flash("Invalid email or password.", "error")
+            flash("邮箱或密码错误。", "error")
         # If POST with errors, surface them
         if request.method == "POST" and form.errors:
             for field, errs in form.errors.items():
@@ -277,7 +277,7 @@ def create_app() -> Flask:
             maybe_seal_block()
         except Exception:  # noqa: BLE001
             pass
-        flash("You have been logged out.", "info")
+        flash("您已退出登录。", "info")
         return redirect(url_for("login"))
 
     @app.route("/dashboard")
@@ -341,7 +341,7 @@ def create_app() -> Flask:
         from forms import RequestHelpForm
 
         if getattr(current_user, "is_blacklisted", False):
-            flash("Your account is blacklisted. You cannot create requests.", "error")
+            flash("您的账号已被列入黑名单，无法发布求助。", "error")
             return redirect(url_for("dashboard"))
 
         form = RequestHelpForm()
@@ -383,7 +383,7 @@ def create_app() -> Flask:
             except Exception:  # noqa: BLE001
                 pass
 
-            flash("Request posted successfully.", "success")
+            flash("求助发布成功。", "success")
             return redirect(url_for("request_help"))
 
         # If POST with errors, flash them
@@ -601,7 +601,7 @@ def create_app() -> Flask:
             except Exception:  # noqa: BLE001
                 pass
 
-            flash("NGO submitted for approval. Our team will verify and publish it.", "success")
+            flash("公益组织已提交审核，我们的团队将进行验证并发布。", "success")
             return redirect(url_for("ngos"))
 
         if request.method == "POST" and form.errors:
@@ -619,7 +619,7 @@ def create_app() -> Flask:
 
         # Require current user location
         if current_user.latitude is None or current_user.longitude is None:
-            flash("Set your location (latitude/longitude) in your profile to see nearby people.", "info")
+            flash("请在个人资料中设置您的位置（经纬度）以查看附近的人。", "info")
             return redirect(url_for("profile_edit"))
 
         # Filters
@@ -802,7 +802,7 @@ def create_app() -> Flask:
 
         # Handle offer submit
         if getattr(current_user, "is_blacklisted", False) and offer_form.submit.data:
-            flash("Your account is blacklisted. You cannot submit offers.", "error")
+            flash("您的账号已被列入黑名单，无法提供帮助。", "error")
             return redirect(url_for("request_detail", request_id=req.id))
         if offer_form.submit.data and offer_form.validate_on_submit():
             msg = offer_form.message.data
@@ -834,7 +834,7 @@ def create_app() -> Flask:
             except Exception:  # noqa: BLE001
                 pass
 
-            flash("Offer submitted to the requester.", "success")
+            flash("帮助提议已发送给求助者。", "success")
             return redirect(url_for("request_detail", request_id=req.id))
 
         # Handle offer acceptance (only by requester)
@@ -867,7 +867,7 @@ def create_app() -> Flask:
                     except Exception:  # noqa: BLE001
                         pass
 
-                    flash(f"Offer from {offer.helper.full_name or offer.helper.username} has been accepted!", "success")
+                    flash(f"已接受来自 {offer.helper.full_name or offer.helper.username} 的帮助！", "success")
                     return redirect(url_for("request_detail", request_id=req.id))
 
         # Handle task completion (only by requester)
@@ -893,7 +893,7 @@ def create_app() -> Flask:
                 except Exception:  # noqa: BLE001
                     pass
 
-                flash("Task marked as completed! You can now leave a review.", "success")
+                flash("任务已标记为完成！您现在可以进行评价。", "success")
                 return redirect(url_for("request_detail", request_id=req.id))
 
         # Handle review submit (only for completed tasks and participants)
@@ -903,7 +903,7 @@ def create_app() -> Flask:
                 HelpOffer.query.filter_by(request_id=req.id, status="completed").first()
             )
             if not completed or req.status != "completed":
-                flash("Reviews are only allowed for completed tasks.", "error")
+                flash("仅已完成的任务可以评价。", "error")
                 return redirect(url_for("request_detail", request_id=req.id))
 
             # Determine counterpart
@@ -912,7 +912,7 @@ def create_app() -> Flask:
             elif current_user.id == completed.helper_id:
                 reviewee_id = req.user_id
             else:
-                flash("You are not a participant in this task.", "error")
+                flash("您不是该任务的参与者。", "error")
                 return redirect(url_for("request_detail", request_id=req.id))
 
             # Prevent duplicate per task per reviewer
@@ -920,7 +920,7 @@ def create_app() -> Flask:
                 Review.query.filter_by(request_id=req.id, reviewer_id=current_user.id).first()
             )
             if exists:
-                flash("You have already reviewed this task.", "error")
+                flash("您已经评价过该任务。", "error")
                 return redirect(url_for("request_detail", request_id=req.id))
 
             rating = int(review_form.rating.data)
@@ -964,7 +964,7 @@ def create_app() -> Flask:
                 pass
 
             db.session.commit()
-            flash("Review submitted.", "success")
+            flash("评价已提交。", "success")
             return redirect(url_for("request_detail", request_id=req.id))
 
         if request.method == "POST" and (offer_form.errors or review_form.errors or accept_form.errors or complete_form.errors):

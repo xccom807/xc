@@ -2,7 +2,7 @@
 {% block content %}
   <section class="hero">
     <h2>社区协作任务互助平台</h2>
-    <p class="muted">Connect with people around you to get help with tasks, offer your skills, volunteer for good, or discover NGOs driving social impact.</p>
+    <p class="muted">连接你周围的人，获得任务帮助，提供技能，参与志愿服务，或发现推动社会影响的公益组织。</p>
   </section>
 
   <section class="cards">
@@ -10,25 +10,25 @@
       <a class="card-link" href="{{ url_for('request_help') }}">
         <div class="card feature">
           <h3><i class="fa-solid fa-hand-holding-hand"></i> 发布求助</h3>
-          <p>Post a task and get assistance from community members near you.</p>
+          <p>发布任务并获得附近社区成员的帮助。</p>
         </div>
       </a>
       <a class="card-link" href="{{ url_for('offer_help') }}">
         <div class="card feature">
           <h3><i class="fa-solid fa-person-rays"></i> 提供帮助</h3>
-          <p>Contribute your skills and time to help others accomplish their goals.</p>
+          <p>贡献你的技能和时间，帮助他人实现目标。</p>
         </div>
       </a>
       <a class="card-link" href="{{ url_for('volunteer') }}">
         <div class="card feature">
           <h3><i class="fa-solid fa-handshake-angle"></i> 志愿服务机会</h3>
-          <p>Find meaningful, no-cost opportunities to serve your community.</p>
+          <p>寻找有意义的无偿机会服务社区。</p>
         </div>
       </a>
       <a class="card-link" href="{{ url_for('ngos') }}">
         <div class="card feature">
           <h3><i class="fa-solid fa-ribbon"></i> 公益组织与社会议题</h3>
-          <p>Explore NGOs and charity projects you can support or collaborate with.</p>
+          <p>探索你可以支持或合作的公益组织和慈善项目。</p>
         </div>
       </a>
     </div>
@@ -37,10 +37,10 @@
   <section class="nearby">
     <div>
       <h3>查看附近的人</h3>
-      <p class="muted">Discover helpers and requesters around your location.</p>
+      <p class="muted">发现你周围的帮助者和求助者。</p>
     </div>
     <div class="actions">
-      <a class="btn" href="{{ url_for('nearby') }}"><i class="fa-solid fa-location-crosshairs"></i> Explore Nearby</a>
+      <a class="btn" href="{{ url_for('nearby') }}"><i class="fa-solid fa-location-crosshairs"></i> 探索附近</a>
     </div>
   </section>
 {% endblock %}

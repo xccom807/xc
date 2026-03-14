@@ -4,35 +4,35 @@
     <div class="card">
       <div class="hero">
         <h2>欢迎回来</h2>
-        <p class="muted">Log in to continue.</p>
+        <p class="muted">登录以继续。</p>
       </div>
       <form method="post" novalidate>
         {{ form.hidden_tag() }}
 
         <div class="field">
-          <label>Email</label>
+          <label>邮箱</label>
           {{ form.email(class='input') }}
           {% for e in form.email.errors %}<div class="flash error">{{ e }}</div>{% endfor %}
         </div>
 
         <div class="field">
-          <label>Password</label>
+          <label>密码</label>
           {{ form.password(class='input') }}
           {% for e in form.password.errors %}<div class="flash error">{{ e }}</div>{% endfor %}
         </div>
 
         <div class="field">
           <label style="display:flex; align-items:center; gap:.5rem;">
-            {{ form.remember_me() }} Remember me
+            {{ form.remember_me() }} 记住我
           </label>
         </div>
 
         <div class="actions">
-          {{ form.submit(class='btn', value='Log in') }}
+          {{ form.submit(class='btn', value='登录') }}
         </div>
 
         <div class="signup-link-bottom">
-          <a href="{{ url_for('signup') }}">Need an account? Sign up</a>
+          <a href="{{ url_for('signup') }}">还没有账号？立即注册</a>
         </div>
       </form>
     </div>

@@ -106,19 +106,19 @@
         </div>
 
         <nav class="nav-links" id="nav">
-          <a href="{{ url_for('index') }}"><i class="fa-solid fa-house"></i> Home</a>
-          <a href="{{ url_for('about') }}"><i class="fa-regular fa-circle-question"></i> About</a>
-          <a href="{{ url_for('connect_wallet') }}" class="wallet-connect"><i class="fa-solid fa-wallet"></i> Connect Wallet</a>
+          <a href="{{ url_for('index') }}"><i class="fa-solid fa-house"></i> 首页</a>
+          <a href="{{ url_for('about') }}"><i class="fa-regular fa-circle-question"></i> 关于我们</a>
+          <a href="{{ url_for('connect_wallet') }}" class="wallet-connect"><i class="fa-solid fa-wallet"></i> 连接钱包</a>
           {% if current_user.is_authenticated %}
-            <a href="{{ url_for('dashboard') }}"><i class="fa-regular fa-user"></i> Dashboard</a>
+            <a href="{{ url_for('dashboard') }}"><i class="fa-regular fa-user"></i> 仪表盘</a>
             {% if current_user.username == 'admin' and current_user.email == 'admin@dailyhelper.com' %}
-              <a href="{{ url_for('admin') }}"><i class="fa-solid fa-shield"></i> Admin</a>
-              <a href="{{ url_for('blockchain_blocks') }}"><i class="fa-solid fa-cube"></i> Blockchain</a>
+              <a href="{{ url_for('admin') }}"><i class="fa-solid fa-shield"></i> 管理员</a>
+              <a href="{{ url_for('blockchain_blocks') }}"><i class="fa-solid fa-cube"></i> 区块链</a>
             {% endif %}
-            <a href="{{ url_for('logout') }}"><i class="fa-solid fa-right-from-brain"></i> Logout</a>
+            <a href="{{ url_for('logout') }}"><i class="fa-solid fa-right-from-brain"></i> 退出</a>
           {% else %}
-            <a href="{{ url_for('login') }}"><i class="fa-solid fa-right-to-bracket"></i> Login</a>
-            <a href="{{ url_for('signup') }}"><i class="fa-regular fa-id-card"></i> Sign Up</a>
+            <a href="{{ url_for('login') }}"><i class="fa-solid fa-right-to-bracket"></i> 登录</a>
+            <a href="{{ url_for('signup') }}"><i class="fa-regular fa-id-card"></i> 注册</a>
           {% endif %}
         </nav>
       </div>
@@ -141,14 +141,14 @@
       <div class="container">
         <div class="grid grid-2">
           <div>
-            <strong>DailyHelper</strong>
-            <p class="muted">A community help platform demo.</p>
+            <strong>每日互助</strong>
+            <p class="muted">一个社区互助平台演示。</p>
           </div>
           <div>
-            <p><a href="{{ url_for('about') }}">About</a> · <a href="https://flask.palletsprojects.com/" target="_blank" rel="noopener">Flask</a></p>
-            <small>&copy; {{ 2025 }} DailyHelper</small>
+            <p><a href="{{ url_for('about') }}">关于我们</a> · <a href="https://flask.palletsprojects.com/" target="_blank" rel="noopener">Flask</a></p>
+            <small>&copy; {{ 2025 }} 每日互助</small>
             <p style="margin-top: 0.5rem;">
-              <strong>Developer's Connect:</strong> 
+              <strong>开发者联系:</strong> 
               <a href="https://www.linkedin.com/in/kavin-krishnan-c-72024k" target="_blank" rel="noopener" style="color: var(--accent-color);">Kavin Krishnan C</a>
             </p>
           </div>

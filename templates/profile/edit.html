@@ -3,51 +3,51 @@
   <section class="card">
     <div class="hero">
       <h2>编辑个人资料</h2>
-      <p class="muted">Update your public information. This helps requesters and helpers know you better.</p>
+      <p class="muted">更新你的公开信息。这有助于求助者和帮助者更好地了解你。</p>
     </div>
     <form method="post" novalidate>
       {{ form.hidden_tag() }}
       <div class="grid grid-2">
         <div class="field">
-          <label>Full Name</label>
+          <label>全名</label>
           {{ form.full_name(class='input') }}
         </div>
         <div class="field">
-          <label>Phone</label>
+          <label>电话</label>
           {{ form.phone(class='input') }}
         </div>
       </div>
       <div class="grid grid-2">
         <div class="field">
-          <label>Location</label>
+          <label>所在地</label>
           {{ form.location(class='input') }}
         </div>
         <div class="field">
-          <label>Profile Picture URL</label>
+          <label>头像 URL</label>
           {{ form.avatar_url(class='input') }}
         </div>
       </div>
       <div class="grid grid-2">
         <div class="field">
-          <label>Latitude</label>
-          {{ form.latitude(class='input', placeholder='e.g., 12.9716') }}
+          <label>纬度</label>
+          {{ form.latitude(class='input', placeholder='例如：12.9716') }}
         </div>
         <div class="field">
-          <label>Longitude</label>
-          {{ form.longitude(class='input', placeholder='e.g., 77.5946') }}
+          <label>经度</label>
+          {{ form.longitude(class='input', placeholder='例如：77.5946') }}
         </div>
       </div>
-      <p class="muted" style="margin-top:.25rem;">Latitude/Longitude are used to power the Nearby People feature.</p>
+      <p class="muted" style="margin-top:.25rem;">纬度/经度用于支持“附近的人”功能。</p>
       <div class="field">
-        <label>About</label>
+        <label>关于我</label>
         {{ form.bio(class='input', rows='4') }}
       </div>
       <div class="field">
-        <label>Skills</label>
-        {{ form.skills(class='input', placeholder='e.g., carpentry, tutoring, first-aid') }}
+        <label>技能</label>
+        {{ form.skills(class='input', placeholder='例如：木工, 家教, 急救') }}
       </div>
       <div class="actions">
-        {{ form.submit(class='btn', value='Save Changes') }}
+        {{ form.submit(class='btn', value='保存更改') }}
       </div>
     </form>
   </section>

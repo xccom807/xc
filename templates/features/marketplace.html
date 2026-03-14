@@ -5,54 +5,54 @@
       <h3 style="margin-top:0;">筛选条件</h3>
       <form method="get">
         <div class="field">
-          <label>Category</label>
+          <label>分类</label>
           <select class="input" name="category">
-            <option value="">All</option>
+            <option value="">全部</option>
             {% for c in categories %}
               <option value="{{ c }}" {% if filters.category == c %}selected{% endif %}>{{ c }}</option>
             {% endfor %}
           </select>
         </div>
         <div class="field">
-          <label>Location</label>
-          <input class="input" type="text" name="location" value="{{ filters.location }}" placeholder="City/Area" />
+          <label>位置</label>
+          <input class="input" type="text" name="location" value="{{ filters.location }}" placeholder="城市/区域" />
         </div>
         <div class="grid grid-2">
           <div class="field">
-            <label>Min Price</label>
+            <label>最低价格</label>
             <input class="input" type="number" step="0.01" name="min_price" value="{{ filters.min_price }}" />
           </div>
           <div class="field">
-            <label>Max Price</label>
+            <label>最高价格</label>
             <input class="input" type="number" step="0.01" name="max_price" value="{{ filters.max_price }}" />
           </div>
         </div>
         <div class="field" style="display:flex; align-items:center; gap:.6rem;">
           <input type="checkbox" name="include_volunteer" id="include_volunteer" {% if filters.include_volunteer %}checked{% endif %} />
-          <label for="include_volunteer" style="margin:0;">Include volunteer/free</label>
+          <label for="include_volunteer" style="margin:0;">包含志愿服务/免费</label>
         </div>
         <div class="grid grid-2">
           <div class="field">
-            <label>Start Date</label>
+            <label>开始日期</label>
             <input class="input" type="date" name="start_date" value="{{ filters.start_date }}" />
           </div>
           <div class="field">
-            <label>End Date</label>
+            <label>结束日期</label>
             <input class="input" type="date" name="end_date" value="{{ filters.end_date }}" />
           </div>
         </div>
         <div class="field">
-          <label>Sort by</label>
+          <label>排序方式</label>
           <select class="input" name="sort">
-            <option value="newest" {% if filters.sort == 'newest' %}selected{% endif %}>Newest</option>
-            <option value="urgent" {% if filters.sort == 'urgent' %}selected{% endif %}>Urgent</option>
-            <option value="price_high_low" {% if filters.sort == 'price_high_low' %}selected{% endif %}>Price: High to Low</option>
-            <option value="price_low_high" {% if filters.sort == 'price_low_high' %}selected{% endif %}>Price: Low to High</option>
+            <option value="newest" {% if filters.sort == 'newest' %}selected{% endif %}>最新</option>
+            <option value="urgent" {% if filters.sort == 'urgent' %}selected{% endif %}>紧急</option>
+            <option value="price_high_low" {% if filters.sort == 'price_high_low' %}selected{% endif %}>价格：从高到低</option>
+            <option value="price_low_high" {% if filters.sort == 'price_low_high' %}selected{% endif %}>价格：从低到高</option>
           </select>
         </div>
         <div class="actions">
-          <button class="btn" type="submit"><i class="fa-solid fa-filter"></i> Apply</button>
-          <a class="btn secondary" href="{{ url_for('marketplace') }}">Reset</a>
+          <button class="btn" type="submit"><i class="fa-solid fa-filter"></i> 应用</button>
+          <a class="btn secondary" href="{{ url_for('marketplace') }}">重置</a>
         </div>
       </form>
     </aside>
@@ -60,7 +60,7 @@
     <section class="results">
       <div class="hero">
         <h2>互助广场</h2>
-        <p class="muted">Explore open requests and offer your help.</p>
+        <p class="muted">浏览公开的求助并提供你的帮助。</p>
       </div>
 
       {% if items %}
@@ -71,23 +71,23 @@
                 <div class="avatar"></div>
                 <div>
                   <strong>{{ r.user.username if r.user else 'User' }}</strong>
-                  <div class="muted" style="font-size:.85rem;">{{ r.location or 'Remote/Anywhere' }}</div>
+                  <div class="muted" style="font-size:.85rem;">{{ r.location or '远程/任意地点' }}</div>
                 </div>
                 <span class="badge {{ r.status }}" style="margin-left:auto;">{{ r.status|capitalize }}</span>
               </div>
               <h3>{{ r.title }}</h3>
               <p class="muted">{{ r.description[:160] }}{% if r.description|length > 160 %}...{% endif %}</p>
               <div class="mp-card__meta">
-                <span class="tag"><i class="fa-regular fa-folder"></i> {{ r.category or 'General' }}</span>
+                <span class="tag"><i class="fa-regular fa-folder"></i> {{ r.category or '未分类' }}</span>
                 {% if r.time_needed %}<span class="tag"><i class="fa-regular fa-clock"></i> {{ r.time_needed }}</span>{% endif %}
                 {% if r.is_volunteer %}
-                  <span class="tag volunteer"><i class="fa-solid fa-hand-holding-heart"></i> Volunteer</span>
+                  <span class="tag volunteer"><i class="fa-solid fa-hand-holding-heart"></i> 志愿服务</span>
                 {% elif r.price is not none %}
                   <span class="tag price"><i class="fa-solid fa-coins"></i> {{ '%.2f'|format(r.price) }}</span>
                 {% endif %}
               </div>
               <div class="actions">
-                <a class="btn" href="{{ url_for('request_detail', request_id=r.id) }}"><i class="fa-solid fa-handshake-angle"></i> Offer Help</a>
+                <a class="btn" href="{{ url_for('request_detail', request_id=r.id) }}"><i class="fa-solid fa-handshake-angle"></i> 提供帮助</a>
               </div>
             </div>
           {% endfor %}
@@ -95,20 +95,20 @@
 
         <div class="pagination">
           {% if pagination.has_prev %}
-            <a class="btn secondary" href="{{ url_for('marketplace', page=pagination.prev_num, **filters) }}">Previous</a>
+            <a class="btn secondary" href="{{ url_for('marketplace', page=pagination.prev_num, **filters) }}">上一页</a>
           {% else %}
-            <span class="btn secondary" style="opacity:.6; pointer-events:none;">Previous</span>
+            <span class="btn secondary" style="opacity:.6; pointer-events:none;">上一页</span>
           {% endif %}
-          <span class="muted">Page {{ pagination.page }} of {{ pagination.pages }}</span>
+          <span class="muted">第 {{ pagination.page }} 页，共 {{ pagination.pages }} 页</span>
           {% if pagination.has_next %}
-            <a class="btn secondary" href="{{ url_for('marketplace', page=pagination.next_num, **filters) }}">Next</a>
+            <a class="btn secondary" href="{{ url_for('marketplace', page=pagination.next_num, **filters) }}">下一页</a>
           {% else %}
-            <span class="btn secondary" style="opacity:.6; pointer-events:none;">Next</span>
+            <span class="btn secondary" style="opacity:.6; pointer-events:none;">下一页</span>
           {% endif %}
         </div>
       {% else %}
         <div class="card" style="margin-top:1rem;">
-          <p class="muted">No requests match your filters. Try broadening your search.</p>
+          <p class="muted">没有找到符合条件的求助。尝试放宽筛选条件。</p>
         </div>
       {% endif %}
     </section>
