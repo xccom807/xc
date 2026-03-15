@@ -381,7 +381,7 @@
 
           // Add click event for user info
           marker.addListener('click', function() {
-            showUserInfo('{{ u.username }}', '{{ u.full_name or u.username }}', '{{ u.location or 'Unknown' }}', '{{ "%.1f"|format(u.reputation_score or 0) }}', '{{ u.skills or 'No skills listed' }}');
+            showUserInfo('{{ u.username }}', '{{ u.full_name or u.username }}', '{{ u.location or "Unknown" }}', '{{ "%.1f"|format(u.reputation_score or 0) }}', '{{ u.skills or "No skills listed" }}');
           });
 
           userMarkers.push(marker);
