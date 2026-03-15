@@ -1,4 +1,5 @@
-from flask import Flask, render_template, redirect, url_for, flash, abort, request
+from datetime import datetime
+from flask import Flask, render_template, redirect, url_for, flash, abort, request, jsonify
 from flask_login import (
     AnonymousUserMixin,
     login_required,
@@ -147,6 +148,14 @@ def create_app() -> Flask:
         w3 = get_web3()
         addr = flask_request.args.get("address", "").strip()
         balance_eth = None
+        error = None
+        if w3 and addr:
+            try:
+                balance_wei = w3.eth.get_balance(addr)
+                balance_eth = w3.from_wei(balance_wei, "ether")
+            except Exception as e:
+                error = str(e)
+        return jsonify({"address": addr, "balance_eth": str(balance_eth) if balance_eth is not None else None, "error": error})
     @app.route("/connect-wallet")
     def connect_wallet():
         return render_template("wallet/connect.html")
@@ -280,6 +289,88 @@ def create_app() -> Flask:
         flash("您已退出登录。", "info")
         return redirect(url_for("login"))
 
+    # ------------------
+    # Password reset
+    # ------------------
+    @app.route("/forgot-password", methods=["GET", "POST"])
+    def forgot_password():
+        from models import User, PasswordResetToken
+        from forms import ForgotPasswordForm
+        import secrets
+
+        form = ForgotPasswordForm()
+        reset_link = None
+        if form.validate_on_submit():
+            user = User.query.filter_by(email=form.email.data.lower()).first()
+            if user:
+                token = secrets.token_urlsafe(32)
+                prt = PasswordResetToken(user_id=user.id, token=token)
+                db.session.add(prt)
+                db.session.commit()
+                reset_link = url_for("reset_password", token=token, _external=True)
+            else:
+                # Don't reveal whether email exists
+                flash("如果该邮箱已注册，重置链接已生成。", "info")
+                return redirect(url_for("forgot_password"))
+        return render_template("auth/forgot_password.html", form=form, reset_link=reset_link)
+
+    @app.route("/reset-password/<token>", methods=["GET", "POST"])
+    def reset_password(token: str):
+        from models import PasswordResetToken
+        from forms import ResetPasswordForm
+        from datetime import timedelta
+
+        prt = PasswordResetToken.query.filter_by(token=token, used=False).first()
+        if prt is None:
+            flash("重置链接无效或已过期。", "error")
+            return redirect(url_for("forgot_password"))
+        # Expire after 1 hour
+        if (datetime.utcnow() - prt.created_at).total_seconds() > 3600:
+            flash("重置链接已过期，请重新申请。", "error")
+            return redirect(url_for("forgot_password"))
+
+        form = ResetPasswordForm()
+        if form.validate_on_submit():
+            prt.user.set_password(form.password.data)
+            prt.used = True
+            db.session.commit()
+            flash("密码已重置，请登录。", "success")
+            return redirect(url_for("login"))
+        return render_template("auth/reset_password.html", form=form, token=token)
+
+    # ------------------
+    # Notifications
+    # ------------------
+    def _notify(user_id: int, kind: str, message: str, link: str = None):
+        """Create a notification for a user."""
+        from models import Notification
+        n = Notification(user_id=user_id, kind=kind, message=message, link=link)
+        db.session.add(n)
+        # Don't commit here — caller commits
+
+    @app.route("/notifications")
+    @login_required
+    def notifications():
+        from models import Notification
+        items = (
+            Notification.query.filter_by(user_id=current_user.id)
+            .order_by(Notification.created_at.desc())
+            .limit(50)
+            .all()
+        )
+        # Mark all as read
+        Notification.query.filter_by(user_id=current_user.id, is_read=False).update({"is_read": True})
+        db.session.commit()
+        return render_template("notifications.html", items=items)
+
+    @app.context_processor
+    def inject_unread_count():
+        if current_user.is_authenticated:
+            from models import Notification
+            count = Notification.query.filter_by(user_id=current_user.id, is_read=False).count()
+            return {"unread_notifications": count}
+        return {"unread_notifications": 0}
+
     @app.route("/dashboard")
     @login_required
     def dashboard():
@@ -288,6 +379,13 @@ def create_app() -> Flask:
         # Stats for the current user
         total_requests = HelpRequest.query.filter_by(user_id=current_user.id).count()
         total_offers = HelpOffer.query.filter_by(helper_id=current_user.id).count()
+        requests_completed = HelpRequest.query.filter_by(user_id=current_user.id, status="completed").count()
+        helps_completed = HelpOffer.query.filter_by(helper_id=current_user.id, status="completed").count()
+        total_offers_attempted = HelpOffer.query.filter(
+            HelpOffer.helper_id == current_user.id,
+            HelpOffer.status.in_(["accepted", "completed", "rejected"]),
+        ).count()
+        success_rate = int((helps_completed / total_offers_attempted) * 100) if total_offers_attempted else 0
         reputation = getattr(current_user, "reputation_score", 0.0)
         pending_tasks = HelpRequest.query.filter(
             HelpRequest.user_id == current_user.id,
@@ -307,6 +405,18 @@ def create_app() -> Flask:
             .limit(5)
             .all()
         )
+        my_requests = (
+            HelpRequest.query.filter_by(user_id=current_user.id)
+            .order_by(HelpRequest.created_at.desc())
+            .limit(20)
+            .all()
+        )
+        my_offers = (
+            HelpOffer.query.filter_by(helper_id=current_user.id)
+            .order_by(HelpOffer.created_at.desc())
+            .limit(20)
+            .all()
+        )
 
         return render_template(
             "dashboard.html",
@@ -315,11 +425,16 @@ def create_app() -> Flask:
                 "total_offers": total_offers,
                 "reputation": reputation,
                 "pending_tasks": pending_tasks,
+                "requests_completed": requests_completed,
+                "helps_completed": helps_completed,
+                "success_rate": success_rate,
             },
             recent={
                 "requests": recent_requests,
                 "offers": recent_offers,
             },
+            my_requests=my_requests,
+            my_offers=my_offers,
         )
 
     
@@ -835,6 +950,14 @@ def create_app() -> Flask:
                 pass
 
             flash("帮助提议已发送给求助者。", "success")
+            # Notify requester
+            _notify(
+                req.user_id,
+                "offer_received",
+                f"{current_user.username} 对您的求助「{req.title[:40]}」提交了帮助提议",
+                url_for("request_detail", request_id=req.id),
+            )
+            db.session.commit()
             return redirect(url_for("request_detail", request_id=req.id))
 
         # Handle offer acceptance (only by requester)
@@ -868,6 +991,23 @@ def create_app() -> Flask:
                         pass
 
                     flash(f"已接受来自 {offer.helper.full_name or offer.helper.username} 的帮助！", "success")
+                    # Notify accepted helper
+                    _notify(
+                        offer.helper_id,
+                        "offer_accepted",
+                        f"您对「{req.title[:40]}」的帮助提议已被接受！",
+                        url_for("request_detail", request_id=req.id),
+                    )
+                    # Notify rejected helpers
+                    rejected = HelpOffer.query.filter_by(request_id=req.id, status="rejected").filter(HelpOffer.helper_id != offer.helper_id).all()
+                    for ro in rejected:
+                        _notify(
+                            ro.helper_id,
+                            "offer_rejected",
+                            f"您对「{req.title[:40]}」的帮助提议未被选中",
+                            url_for("request_detail", request_id=req.id),
+                        )
+                    db.session.commit()
                     return redirect(url_for("request_detail", request_id=req.id))
 
         # Handle task completion (only by requester)
@@ -894,6 +1034,14 @@ def create_app() -> Flask:
                     pass
 
                 flash("任务已标记为完成！您现在可以进行评价。", "success")
+                # Notify helper
+                _notify(
+                    accepted_offer.helper_id,
+                    "task_completed",
+                    f"求助者已将「{req.title[:40]}」标记为完成，请互相评价！",
+                    url_for("request_detail", request_id=req.id),
+                )
+                db.session.commit()
                 return redirect(url_for("request_detail", request_id=req.id))
 
         # Handle review submit (only for completed tasks and participants)
@@ -965,6 +1113,15 @@ def create_app() -> Flask:
 
             db.session.commit()
             flash("评价已提交。", "success")
+            # Notify reviewee
+            stars = "★" * rating + "☆" * (5 - rating)
+            _notify(
+                reviewee_id,
+                "review_received",
+                f"{current_user.username} 给您留下了评价 {stars}（任务：{req.title[:30]}）",
+                url_for("request_detail", request_id=req.id),
+            )
+            db.session.commit()
             return redirect(url_for("request_detail", request_id=req.id))
 
         if request.method == "POST" and (offer_form.errors or review_form.errors or accept_form.errors or complete_form.errors):

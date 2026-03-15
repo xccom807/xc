@@ -1,4 +1,4 @@
-echo '{% extends "base.html" %}
+{% extends "base.html" %}
 {% block head_extra %}
 <style>
 .dashboard-subnav {
@@ -97,6 +97,22 @@ echo '{% extends "base.html" %}
   color: var(--text-muted);
 }
 
+.dashboard-list {
+  margin: 0;
+  padding-left: 1rem;
+}
+
+.dashboard-list li {
+  margin: 0.6rem 0;
+}
+
+.dashboard-actions {
+  margin-top: 1rem;
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
 @media (max-width: 768px) {
   .stats-horizontal {
     grid-template-columns: 1fr;
@@ -107,16 +123,12 @@ echo '{% extends "base.html" %}
 
 {% block content %}
   <div class="dashboard">
-    <!-- Top Navigation Bar -->
     <nav class="dashboard-nav">
       <div class="nav-container">
         <h3 style="margin:0; color: var(--primary-color);">欢迎，{{ current_user.full_name or current_user.username }}</h3>
-        <div class="nav-buttons">
-        </div>
       </div>
     </nav>
 
-    <!-- Sub Navigation Bar -->
     <nav class="dashboard-subnav">
       <div class="subnav-container">
         <a href="#main-dashboard" class="subnav-item active">仪表盘</a>
@@ -138,7 +150,7 @@ echo '{% extends "base.html" %}
         "accepted": "已接受",
         "rejected": "已拒绝"
       } %}
-      <!-- Main Dashboard Stats (shown by default) -->
+
       <div id="main-dashboard" class="dashboard-section active">
         <div class="stats-horizontal">
           <div class="stat-card">
@@ -174,21 +186,32 @@ echo '{% extends "base.html" %}
         <div class="section" id="recent">
           <h3>最近动态</h3>
           {% if recent.requests or recent.offers %}
-            <ul>
+            <ul class="dashboard-list">
               {% for r in recent.requests %}
-                <li><strong>求助：</strong> {{ r.title }} - {{ status_labels.get(r.status, r.status) }}</li>
+                <li>
+                  <strong>求助：</strong>
+                  <a href="{{ url_for("request_detail", request_id=r.id) }}">{{ r.title }}</a>
+                  - {{ status_labels.get(r.status, r.status) }}
+                </li>
               {% endfor %}
               {% for o in recent.offers %}
-                <li><strong>帮助：</strong> 针对求助 #{{ o.request_id }} - {{ status_labels.get(o.status, o.status) }}</li>
+                <li>
+                  <strong>帮助：</strong>
+                  <a href="{{ url_for("request_detail", request_id=o.request_id) }}">查看对应求助 #{{ o.request_id }}</a>
+                  - {{ status_labels.get(o.status, o.status) }}
+                </li>
               {% endfor %}
             </ul>
           {% else %}
             <p class="muted">暂无最近动态。</p>
           {% endif %}
+          <div class="dashboard-actions">
+            <a class="btn" href="{{ url_for("request_help") }}">发布求助</a>
+            <a class="btn secondary" href="{{ url_for("marketplace") }}">去帮助别人</a>
+          </div>
         </div>
       </div>
 
-      <!-- My Profile Section -->
       <div id="profile" class="dashboard-section">
         <div class="section">
           <h3>我的资料</h3>
@@ -208,49 +231,62 @@ echo '{% extends "base.html" %}
         </div>
       </div>
 
-      <!-- My Requests Section -->
       <div id="requests" class="dashboard-section">
         <div class="section">
           <h3>我的求助</h3>
-          {% if recent.requests %}
-            <ul>
-              {% for r in recent.requests %}
-                <li><strong>{{ r.title }}</strong> - {{ status_labels.get(r.status, r.status) }} - {{ r.created_at.strftime("%Y-%m-%d") }}</li>
+          {% if my_requests %}
+            <ul class="dashboard-list">
+              {% for r in my_requests %}
+                <li>
+                  <strong><a href="{{ url_for("request_detail", request_id=r.id) }}">{{ r.title }}</a></strong>
+                  - {{ status_labels.get(r.status, r.status) }}
+                  - {{ r.created_at.strftime("%Y-%m-%d") }}
+                </li>
               {% endfor %}
             </ul>
           {% else %}
-            <p>暂未发布任何求助</p>
-            <a class="btn btn-spaced" href="{{ url_for("request_help") }}">发布第一条求助</a>
+            <p>暂未发布任何求助。</p>
           {% endif %}
+          <div class="dashboard-actions">
+            <a class="btn" href="{{ url_for("request_help") }}">发布新求助</a>
+            <a class="btn secondary" href="{{ url_for("marketplace") }}">去市场查看求助</a>
+          </div>
         </div>
       </div>
 
-      <!-- My Offers Section -->
       <div id="offers" class="dashboard-section">
         <div class="section">
           <h3>我的帮助</h3>
-          {% if recent.offers %}
-            <ul>
-              {% for o in recent.offers %}
-                <li><strong>对求助 #{{ o.request_id }} 提供帮助</strong> - {{ status_labels.get(o.status, o.status) }}</li>
+          {% if my_offers %}
+            <ul class="dashboard-list">
+              {% for o in my_offers %}
+                <li>
+                  <strong><a href="{{ url_for("request_detail", request_id=o.request_id) }}">对应求助 #{{ o.request_id }}</a></strong>
+                  - {{ status_labels.get(o.status, o.status) }}
+                  - {{ o.created_at.strftime("%Y-%m-%d") }}
+                </li>
               {% endfor %}
             </ul>
           {% else %}
-            <p>暂未提供任何帮助</p>
-            <a class="btn btn-spaced" href="{{ url_for("marketplace") }}">浏览可帮助的求助</a>
+            <p>暂未提供任何帮助。</p>
           {% endif %}
+          <div class="dashboard-actions">
+            <a class="btn" href="{{ url_for("marketplace") }}">去帮助别人</a>
+            <a class="btn secondary" href="{{ url_for("my_offers") }}">查看我的帮助记录</a>
+          </div>
         </div>
       </div>
 
-      <!-- My Reviews Section -->
       <div id="reviews" class="dashboard-section">
         <div class="section">
           <h3>我的评价</h3>
-          <p>暂无评价。完成更多任务即可逐步建立你的信誉！</p>
+          <p>可在已完成任务详情页提交评价并查看历史评价。</p>
+          <div class="dashboard-actions">
+            <a class="btn" href="{{ url_for("my_offers") }}">查看任务状态</a>
+          </div>
         </div>
       </div>
 
-      <!-- Reputation Score Section -->
       <div id="reputation" class="dashboard-section">
         <div class="section">
           <h3>信誉评分</h3>
@@ -291,4 +327,4 @@ echo '{% extends "base.html" %}
       document.getElementById("main-dashboard").classList.add("active");
     });
   </script>
-{% endblock %}' > c:\Users\kavin\Kaspersky-519-WT-05\templates\dashboard.html
+{% endblock %}

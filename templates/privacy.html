@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% set title = '隐私政策 | 社区互助' %}
+{% block content %}
+<div class="container" style="max-width:800px;padding-top:3rem;padding-bottom:3rem;">
+  <nav class="breadcrumbs" style="margin-bottom:2rem;font-size:0.9rem;color:var(--text-muted);">
+    <a href="{{ url_for('index') }}" style="color:var(--text-muted);text-decoration:none;">首页</a>
+    <span style="margin:0 0.5rem;">›</span>
+    <span>隐私政策</span>
+  </nav>
+  <h1 style="font-size:2.5rem;font-weight:800;margin-bottom:0.5rem;">隐私政策</h1>
+  <p style="color:var(--text-muted);margin-bottom:2rem;">最后更新：2025年1月</p>
+
+  {% set sections = [
+    ("1. 我们收集的信息", "我们收集你注册时提供的信息（用户名、邮箱、位置等）、任务相关数据、评价记录，以及区块链钱包地址（如已连接）。"),
+    ("2. 信息使用方式", "收集的信息用于：提供平台服务、计算信誉分、匹配求助与帮助者、发送服务通知。我们不会将你的个人信息出售给第三方。"),
+    ("3. 区块链数据", "存储于区块链的数据（任务记录、信誉分、交易）是公开且不可删除的，这是区块链技术的固有特性。请在提交前确认你愿意公开相关信息。"),
+    ("4. 位置信息", "位置信息用于匹配附近的任务和帮助者。你可以在账户设置中控制位置精度。我们不会在未经授权的情况下实时追踪你的位置。"),
+    ("5. 数据安全", "我们采用行业标准的安全措施保护你的数据。但请注意，没有任何系统能保证绝对安全，请妥善保管你的账户密码和钱包私钥。"),
+    ("6. Cookie", "我们使用必要的 Cookie 维持登录状态和基本功能。不使用第三方追踪 Cookie。"),
+    ("7. 你的权利", "你可以随时查看、修改或删除你的账户信息。注意：区块链上的数据无法删除。如需帮助，请联系我们。"),
+    ("8. 政策变更", "隐私政策如有重大变更，我们将通过平台通知用户。继续使用平台视为接受新政策。"),
+  ] %}
+
+  {% for title_text, content in sections %}
+  <div style="background:var(--panel-color);border:1px solid var(--border-color);border-radius:var(--border-radius);padding:1.5rem 2rem;margin-bottom:1rem;">
+    <h2 style="font-size:1.2rem;font-weight:700;margin-bottom:0.75rem;">{{ title_text }}</h2>
+    <p style="color:var(--text-muted);line-height:1.7;margin:0;">{{ content }}</p>
+  </div>
+  {% endfor %}
+
+  <div style="text-align:center;margin-top:2rem;color:var(--text-muted);font-size:0.9rem;">
+    如有隐私相关问题，请联系 <a href="mailto:support@example.com">support@example.com</a>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% set title = '服务条款 | 社区互助' %}
+{% block content %}
+<div class="container" style="max-width:800px;padding-top:3rem;padding-bottom:3rem;">
+  <nav class="breadcrumbs" style="margin-bottom:2rem;font-size:0.9rem;color:var(--text-muted);">
+    <a href="{{ url_for('index') }}" style="color:var(--text-muted);text-decoration:none;">首页</a>
+    <span style="margin:0 0.5rem;">›</span>
+    <span>服务条款</span>
+  </nav>
+  <h1 style="font-size:2.5rem;font-weight:800;margin-bottom:0.5rem;">服务条款</h1>
+  <p style="color:var(--text-muted);margin-bottom:2rem;">最后更新：2025年1月</p>
+
+  {% set sections = [
+    ("1. 接受条款", "使用本平台即表示你同意遵守本服务条款。如不同意，请停止使用本平台。"),
+    ("2. 服务说明", "本平台为社区互助连接服务，帮助有需求的用户与愿意提供帮助的用户建立联系。平台本身不直接提供任何劳务服务。"),
+    ("3. 用户责任", "用户须对自己发布的内容和行为负责。禁止发布虚假信息、违法内容或骚扰他人。用户须确保线下见面的安全，建议在公共场所进行。"),
+    ("4. 支付与报酬", "平台支持加密货币点对点支付。平台目前不收取佣金，但保留未来调整收费政策的权利，届时将提前通知用户。"),
+    ("5. 信誉系统", "信誉分基于真实任务评价计算，存储于区块链，不可篡改。禁止任何形式的刷分或虚假评价行为。"),
+    ("6. 免责声明", "平台不对用户之间的纠纷、线下互动的安全或任务质量承担责任。用户自行承担使用平台的风险。"),
+    ("7. 账户终止", "违反本条款的用户账户可能被暂停或永久封禁，链上记录不受影响。"),
+    ("8. 条款变更", "我们保留随时修改本条款的权利。重大变更将通过平台通知用户。继续使用平台视为接受新条款。"),
+  ] %}
+
+  {% for title_text, content in sections %}
+  <div style="background:var(--panel-color);border:1px solid var(--border-color);border-radius:var(--border-radius);padding:1.5rem 2rem;margin-bottom:1rem;">
+    <h2 style="font-size:1.2rem;font-weight:700;margin-bottom:0.75rem;">{{ title_text }}</h2>
+    <p style="color:var(--text-muted);line-height:1.7;margin:0;">{{ content }}</p>
+  </div>
+  {% endfor %}
+
+  <div style="text-align:center;margin-top:2rem;color:var(--text-muted);font-size:0.9rem;">
+    如有疑问，请联系 <a href="mailto:support@example.com">support@example.com</a>
+  </div>
+</div>
+{% endblock %}

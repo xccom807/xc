@@ -25,6 +25,9 @@
           <label style="display:flex; align-items:center; gap:.5rem;">
             {{ form.remember_me() }} 记住我
           </label>
+          <div style="margin-top:0.5rem;">
+            <a href="{{ url_for('forgot_password') }}" style="font-size:0.85rem;color:var(--text-muted);">忘记密码？</a>
+          </div>
         </div>
 
         <div class="actions">

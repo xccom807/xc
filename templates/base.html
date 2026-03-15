@@ -111,6 +111,12 @@
           <a href="{{ url_for('connect_wallet') }}" class="wallet-connect"><i class="fa-solid fa-wallet"></i> 连接钱包</a>
           {% if current_user.is_authenticated %}
             <a href="{{ url_for('dashboard') }}"><i class="fa-regular fa-user"></i> 仪表盘</a>
+            <a href="{{ url_for('notifications') }}" style="position:relative;">
+              <i class="fa-regular fa-bell"></i> 通知
+              {% if unread_notifications > 0 %}
+                <span style="position:absolute;top:-6px;right:-8px;background:#ef4444;color:#fff;border-radius:50%;font-size:0.7rem;min-width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;">{{ unread_notifications }}</span>
+              {% endif %}
+            </a>
             {% if current_user.username == 'admin' and current_user.email == 'admin@dailyhelper.com' %}
               <a href="{{ url_for('admin') }}"><i class="fa-solid fa-shield"></i> 管理员</a>
               <a href="{{ url_for('blockchain_blocks') }}"><i class="fa-solid fa-cube"></i> 区块链</a>

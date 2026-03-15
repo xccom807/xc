@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% set title = '帮助中心 | 社区互助' %}
+{% block content %}
+<div class="container" style="max-width:800px;padding-top:3rem;padding-bottom:3rem;">
+  <nav class="breadcrumbs" style="margin-bottom:2rem;font-size:0.9rem;color:var(--text-muted);">
+    <a href="{{ url_for('index') }}" style="color:var(--text-muted);text-decoration:none;">首页</a>
+    <span style="margin:0 0.5rem;">›</span>
+    <span>帮助中心</span>
+  </nav>
+  <h1 style="font-size:2.5rem;font-weight:800;margin-bottom:2rem;">帮助中心</h1>
+
+  <div style="background:var(--panel-color);border:1px solid var(--border-color);border-radius:var(--border-radius);padding:2rem;margin-bottom:2rem;">
+    <h2 style="font-size:1.5rem;font-weight:700;margin-bottom:1rem;">快速入门</h2>
+    <ul style="line-height:2;color:var(--text-muted);padding-left:1.5rem;">
+      <li><a href="{{ url_for('signup') }}">注册账户</a> — 创建你的社区互助账号</li>
+      <li><a href="{{ url_for('request_help') }}">发布求助</a> — 描述你需要的帮助</li>
+      <li><a href="{{ url_for('marketplace') }}">浏览任务</a> — 找到你可以帮忙的任务</li>
+      <li><a href="{{ url_for('about') }}">了解平台</a> — 了解我们的运作方式</li>
+    </ul>
+  </div>
+
+  <div style="background:var(--panel-color);border:1px solid var(--border-color);border-radius:var(--border-radius);padding:2rem;margin-bottom:2rem;">
+    <h2 style="font-size:1.5rem;font-weight:700;margin-bottom:1rem;">常见问题</h2>
+    <div style="margin-bottom:1.5rem;">
+      <h3 style="font-weight:600;margin-bottom:0.5rem;">如何发布求助？</h3>
+      <p style="color:var(--text-muted);line-height:1.7;">登录后点击"发布求助"，填写任务描述、地点、报酬等信息，提交后即可等待帮助者响应。</p>
+    </div>
+    <div style="margin-bottom:1.5rem;">
+      <h3 style="font-weight:600;margin-bottom:0.5rem;">如何成为帮助者？</h3>
+      <p style="color:var(--text-muted);line-height:1.7;">注册账户后，在"浏览任务"页面找到感兴趣的任务，点击申请即可。</p>
+    </div>
+    <div style="margin-bottom:1.5rem;">
+      <h3 style="font-weight:600;margin-bottom:0.5rem;">信誉分如何获得？</h3>
+      <p style="color:var(--text-muted);line-height:1.7;">每次成功完成任务后，对方可以给你评价，评价会计入你的链上信誉分。</p>
+    </div>
+    <div>
+      <h3 style="font-weight:600;margin-bottom:0.5rem;">如何联系客服？</h3>
+      <p style="color:var(--text-muted);line-height:1.7;">请发送邮件至 <a href="mailto:support@example.com">support@example.com</a>，我们会尽快回复。</p>
+    </div>
+  </div>
+
+  <div style="text-align:center;padding:2rem;background:rgba(59,130,246,0.05);border-radius:var(--border-radius);">
+    <p style="color:var(--text-muted);margin-bottom:1rem;">还有其他问题？</p>
+    <a href="mailto:support@example.com" class="btn">联系我们</a>
+  </div>
+</div>
+{% endblock %}

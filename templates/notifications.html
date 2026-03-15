@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+{% set title = '通知 | 每日互助' %}
+{% block content %}
+<div class="container" style="max-width:700px;padding-top:2rem;padding-bottom:3rem;">
+  <h1 style="font-size:1.8rem;font-weight:700;margin-bottom:1.5rem;">
+    <i class="fa-regular fa-bell"></i> 通知
+  </h1>
+
+  {% if items %}
+    <div>
+      {% for n in items %}
+        {% set icon_map = {
+          'offer_received': 'fa-solid fa-hand-holding-heart',
+          'offer_accepted': 'fa-solid fa-circle-check',
+          'offer_rejected': 'fa-solid fa-circle-xmark',
+          'task_completed': 'fa-solid fa-flag-checkered',
+          'review_received': 'fa-solid fa-star',
+        } %}
+        {% set color_map = {
+          'offer_received': '#3b82f6',
+          'offer_accepted': '#22c55e',
+          'offer_rejected': '#ef4444',
+          'task_completed': '#f59e0b',
+          'review_received': '#a855f7',
+        } %}
+        <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem;border-bottom:1px solid var(--border-color);{% if not n.is_read %}background:rgba(59,130,246,0.04);{% endif %}">
+          <div style="flex-shrink:0;width:36px;height:36px;border-radius:50%;background:{{ color_map.get(n.kind, '#6b7280') }}22;display:flex;align-items:center;justify-content:center;color:{{ color_map.get(n.kind, '#6b7280') }};">
+            <i class="{{ icon_map.get(n.kind, 'fa-regular fa-bell') }}"></i>
+          </div>
+          <div style="flex:1;min-width:0;">
+            {% if n.link %}
+              <a href="{{ n.link }}" style="color:var(--text-color);text-decoration:none;line-height:1.5;">{{ n.message }}</a>
+            {% else %}
+              <span style="line-height:1.5;">{{ n.message }}</span>
+            {% endif %}
+            <div style="font-size:0.8rem;color:var(--text-muted);margin-top:0.25rem;">
+              {{ n.created_at.strftime('%Y-%m-%d %H:%M') }}
+            </div>
+          </div>
+          {% if not n.is_read %}
+            <div style="flex-shrink:0;width:8px;height:8px;border-radius:50%;background:#3b82f6;margin-top:6px;"></div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div style="text-align:center;padding:4rem 2rem;color:var(--text-muted);">
+      <i class="fa-regular fa-bell" style="font-size:3rem;margin-bottom:1rem;display:block;opacity:0.3;"></i>
+      暂无通知
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -104,6 +104,20 @@ class ProfileForm(FlaskForm):
     submit = SubmitField("保存更改")
 
 
+class ForgotPasswordForm(FlaskForm):
+    email = StringField("邮箱", validators=[DataRequired(), Email(), Length(max=120)])
+    submit = SubmitField("发送重置链接")
+
+
+class ResetPasswordForm(FlaskForm):
+    password = PasswordField("新密码", validators=[DataRequired(), Length(min=6)])
+    confirm_password = PasswordField(
+        "确认新密码",
+        validators=[DataRequired(), EqualTo("password", message="两次输入的密码不一致")],
+    )
+    submit = SubmitField("重置密码")
+
+
 class AcceptOfferForm(FlaskForm):
     submit = SubmitField("接受帮助")
 
