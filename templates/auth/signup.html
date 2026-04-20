@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block content %}
-  <div class="auth-wrapper">
+  <div class="auth-wrapper" style="max-width:540px;">
     <div class="card">
       <div class="hero">
         <h2>创建账号</h2>
@@ -60,31 +60,4 @@
       </form>
     </div>
   </div>
-{% endblock %}
-
-{% block head_extra %}
-<style>
-.login-link-bottom {
-  position: absolute;
-  bottom: 1.5rem;
-  right: 1.5rem;
-  margin: 0;
-}
-
-.login-link-bottom a {
-  color: var(--text-muted);
-  text-decoration: underline;
-  font-size: 0.9rem;
-  font-weight: bold;
-  transition: color 0.3s ease;
-}
-
-.login-link-bottom a:hover {
-  color: var(--accent-color);
-}
-
-.card {
-  position: relative;
-}
-</style>
 {% endblock %}

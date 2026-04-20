@@ -1,9 +1,9 @@
 {% extends 'base.html' %}
 {% set title = '关于我们 | 社区互助' %}
 {% block head_extra %}
-  <meta name="description" content="A blockchain-powered platform connecting people who need help with helpers in their community. Trust, transparency, and fair rewards." />
-  <meta property="og:title" content="Building Trust Through Community & Technology" />
-  <meta property="og:description" content="Decentralized task assistance with on-chain reputation and zero commissions." />
+  <meta name="description" content="基于区块链的社区互助平台，连接需要帮助的人与社区中的帮助者。信任、透明、公平回报。" />
+  <meta property="og:title" content="以社区与技术构建信任" />
+  <meta property="og:description" content="去中心化任务互助，链上信誉，零佣金。" />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="{{ request.url_root.rstrip('/') }}{{ url_for('about') }}" />
   <meta property="og:image" content="{{ url_for('static', filename='img/og-default.png') }}" />

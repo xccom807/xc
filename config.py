@@ -20,7 +20,16 @@ class Config:
     LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
 
     # Web3 / Blockchain
-    ETH_RPC_URL = os.environ.get("ETH_RPC_URL", "")  # e.g. https://sepolia.infura.io/v3/<KEY>
-    ETH_CHAIN_NAME = os.environ.get("ETH_CHAIN_NAME", "")
+    ETH_RPC_URL = os.environ.get("ETH_RPC_URL", "https://sepolia.infura.io/v3/78fe51a047cc4283a879c99a59cdc09e")
+    ETH_CHAIN_NAME = os.environ.get("ETH_CHAIN_NAME", "sepolia")
+    ETH_CHAIN_ID = os.environ.get("ETH_CHAIN_ID", "11155111")
+    ETH_SIGNER_PRIVATE_KEY = os.environ.get("ETH_SIGNER_PRIVATE_KEY", "d0863861c64d330cfcc228d6dd79e51ff9d10e0728976c8472e90f2191235a0f")
+    ETH_ANCHOR_TARGET_ADDRESS = os.environ.get("ETH_ANCHOR_TARGET_ADDRESS", "")
+    ETH_ANCHOR_GAS_LIMIT = int(os.environ.get("ETH_ANCHOR_GAS_LIMIT", "120000"))
+    ETH_GAS_PRICE_MULTIPLIER = float(os.environ.get("ETH_GAS_PRICE_MULTIPLIER", "1.0"))
+    ETH_WAIT_FOR_RECEIPT = os.environ.get("ETH_WAIT_FOR_RECEIPT", "true").strip().lower() in {"1", "true", "yes", "on"}
+    ETH_TX_TIMEOUT_SECONDS = int(os.environ.get("ETH_TX_TIMEOUT_SECONDS", "180"))
+    ETH_EXPLORER_TX_BASE_URL = os.environ.get("ETH_EXPLORER_TX_BASE_URL", "https://sepolia.etherscan.io/tx")
+    BLOCKCHAIN_ANCHOR_AUTO = os.environ.get("BLOCKCHAIN_ANCHOR_AUTO", "true").strip().lower() in {"1", "true", "yes", "on"}
     # Internal blockchain batching (number of statements per block)
     BLOCK_SIZE = int(os.environ.get("BLOCK_SIZE", "10"))

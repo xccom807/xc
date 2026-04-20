@@ -1,93 +1,12 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ title or '每日互助' }}</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha512-SxZl1c2L3e3Qp2bQ6l3n3FQb3JQjGQm0r6qg4jKp3Yl1k1eZsVZJf1l9m1z2e6lLQy2p5cJwEJYM1o9rj3pQjw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}" />
-    <style>
-      .wallet-connect {
-        background: linear-gradient(135deg, #3b82f6, #1d4ed8) !important;
-        color: white !important;
-        border: 2px solid #3b82f6 !important;
-        border-radius: 8px !important;
-        padding: 0.75rem 1.5rem !important;
-        font-weight: 600 !important;
-        transition: all 0.3s ease !important;
-        box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3) !important;
-      }
-
-      .offer-card {
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        padding: 1rem;
-        margin-bottom: 1rem;
-        background: var(--bg-color);
-      }
-
-      .offer-card.pending {
-        border-left: 4px solid #ffa500;
-      }
-
-      .offer-card.accepted {
-        border-left: 4px solid #28a745;
-      }
-
-      .offer-card.rejected {
-        border-left: 4px solid #dc3545;
-        opacity: 0.7;
-      }
-
-      .offer-card.completed {
-        border-left: 4px solid #007bff;
-      }
-
-      .offer-head {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        margin-bottom: 0.75rem;
-      }
-
-      .offer-message {
-        color: var(--text-muted);
-        font-size: 0.9rem;
-        line-height: 1.4;
-        margin-bottom: 0.75rem;
-      }
-
-      .reputation-badge {
-        background: var(--accent-color);
-        color: white;
-        padding: 0.25rem 0.5rem;
-        border-radius: 12px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        display: inline-block;
-        margin-top: 0.25rem;
-      }
-
-      .btn-small {
-        padding: 0.5rem 1rem;
-        font-size: 0.85rem;
-      }
-
-      .btn-success {
-        background: #28a745;
-        color: white;
-        border: none;
-      }
-
-      .btn-success:hover {
-        background: #218838;
-      }
-
-      .offers-list {
-        max-height: 400px;
-        overflow-y: auto;
-      }
-    </style>
     {% block head_extra %}{% endblock %}
   </head>
   <body>
@@ -95,33 +14,36 @@
       <div class="container">
         <div class="brand">
           <span class="dot"></span>
-          <h1 style="margin:0; font-size:1.25rem;"><a href="/">每日互助</a></h1>
+          <h1 class="brand-title"><a href="/">每日互助</a></h1>
         </div>
 
-        <div style="text-align: center; flex: 1;">
-          <h2 style="margin: 0; font-size: 1.25rem; color: var(--accent-color); font-weight: 600;">团队名称：xccom</h2>
+        <div class="header-center">
+          <span class="team-label">团队：xccom</span>
         </div>
 
         <div class="header-actions">
+          <button class="hamburger" aria-label="菜单" id="menuToggle">
+            <i class="fa-solid fa-bars"></i>
+          </button>
         </div>
 
         <nav class="nav-links" id="nav">
           <a href="{{ url_for('index') }}"><i class="fa-solid fa-house"></i> 首页</a>
-          <a href="{{ url_for('about') }}"><i class="fa-regular fa-circle-question"></i> 关于我们</a>
-          <a href="{{ url_for('connect_wallet') }}" class="wallet-connect"><i class="fa-solid fa-wallet"></i> 连接钱包</a>
+          <a href="javascript:void(0)" class="wallet-connect" id="connectMetaMaskBtn" onclick="connectMetaMaskNav()"><i class="fa-solid fa-wallet"></i> 连接 MetaMask</a>
           {% if current_user.is_authenticated %}
-            <a href="{{ url_for('dashboard') }}"><i class="fa-regular fa-user"></i> 仪表盘</a>
-            <a href="{{ url_for('notifications') }}" style="position:relative;">
+            <a href="{{ url_for('dashboard') }}"><i class="fa-solid fa-gauge"></i> 仪表盘</a>
+            <a href="{{ url_for('profile_view', username=current_user.username) }}"><i class="fa-solid fa-user"></i> 我的资料</a>
+            <a href="{{ url_for('notifications') }}" class="nav-notification">
               <i class="fa-regular fa-bell"></i> 通知
               {% if unread_notifications > 0 %}
-                <span style="position:absolute;top:-6px;right:-8px;background:#ef4444;color:#fff;border-radius:50%;font-size:0.7rem;min-width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;">{{ unread_notifications }}</span>
+                <span class="notification-badge">{{ unread_notifications }}</span>
               {% endif %}
             </a>
             {% if current_user.username == 'admin' and current_user.email == 'admin@dailyhelper.com' %}
               <a href="{{ url_for('admin') }}"><i class="fa-solid fa-shield"></i> 管理员</a>
               <a href="{{ url_for('blockchain_blocks') }}"><i class="fa-solid fa-cube"></i> 区块链</a>
             {% endif %}
-            <a href="{{ url_for('logout') }}"><i class="fa-solid fa-right-from-brain"></i> 退出</a>
+            <a href="{{ url_for('logout') }}"><i class="fa-solid fa-right-from-bracket"></i> 退出</a>
           {% else %}
             <a href="{{ url_for('login') }}"><i class="fa-solid fa-right-to-bracket"></i> 登录</a>
             <a href="{{ url_for('signup') }}"><i class="fa-regular fa-id-card"></i> 注册</a>
@@ -151,17 +73,63 @@
             <p class="muted">一个社区互助平台演示。</p>
           </div>
           <div>
-            <p><a href="{{ url_for('about') }}">关于我们</a> · <a href="https://flask.palletsprojects.com/" target="_blank" rel="noopener">Flask</a></p>
-            <small>&copy; {{ 2025 }} 每日互助</small>
-            <p style="margin-top: 0.5rem;">
-              <strong>开发者联系:</strong> 
-              <a href="https://www.linkedin.com/in/kavin-krishnan-c-72024k" target="_blank" rel="noopener" style="color: var(--accent-color);">Kavin Krishnan C</a>
-            </p>
+            <p><a href="https://flask.palletsprojects.com/" target="_blank" rel="noopener">Flask</a></p>
+            <small>&copy; 2025 每日互助</small>
           </div>
         </div>
       </div>
     </footer>
 
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script>
+    async function connectMetaMaskNav() {
+      if (typeof window.ethereum === 'undefined' || !window.ethereum.isMetaMask) {
+        alert('未检测到 MetaMask，请先安装 MetaMask 浏览器扩展。');
+        window.open('https://metamask.io/download/', '_blank');
+        return;
+      }
+      try {
+        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+        if (!accounts || !accounts.length) { alert('未返回钱包账户。'); return; }
+        const address = accounts[0];
+        const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+
+        const challengeRes = await fetch('/wallet/challenge', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address })
+        });
+        const challengeData = await challengeRes.json();
+        if (!challengeRes.ok || !challengeData.ok) {
+          alert(challengeData.error || '验证挑战创建失败');
+          return;
+        }
+
+        const signature = await window.ethereum.request({
+          method: 'personal_sign',
+          params: [challengeData.message, address]
+        });
+
+        const verifyRes = await fetch('/wallet/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address, signature, chain_id: chainId })
+        });
+        const verifyData = await verifyRes.json();
+        if (!verifyRes.ok || !verifyData.ok) {
+          alert(verifyData.error || '签名验证失败');
+          return;
+        }
+
+        const btn = document.getElementById('connectMetaMaskBtn');
+        if (btn) {
+          btn.innerHTML = '<i class="fa-solid fa-check"></i> 已连接: ' + address.substring(0, 6) + '...' + address.substring(address.length - 4);
+        }
+      } catch (error) {
+        if (error && error.code === 4001) { return; }
+        alert('连接 MetaMask 失败: ' + (error.message || error));
+      }
+    }
+    </script>
   </body>
 </html>

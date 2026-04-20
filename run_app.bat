@@ -4,6 +4,18 @@
 @echo off
 title DailyHelper - Community Help Platform
 
+:: ---- Blockchain / Web3 Configuration ----
+:: 从 Infura 获取的 RPC URL（当前使用 Sepolia 测试网）
+set ETH_RPC_URL=https://sepolia.infura.io/v3/78fe51a047cc4283a879c99a59cdc09e
+set ETH_CHAIN_NAME=sepolia
+set ETH_CHAIN_ID=11155111
+:: 以太坊钱包私钥（请勿泄露！此私钥已暴露，请尽快更换！）
+set ETH_SIGNER_PRIVATE_KEY=d0863861c64d330cfcc228d6dd79e51ff9d10e0728976c8472e90f2191235a0f
+:: 可选：区块浏览器地址
+set ETH_EXPLORER_TX_BASE_URL=https://sepolia.etherscan.io/tx
+:: 是否自动上链
+set BLOCKCHAIN_ANCHOR_AUTO=true
+
 :: Activate virtual environment and run Flask app
 echo Starting DailyHelper application...
 echo.

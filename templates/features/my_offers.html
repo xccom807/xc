@@ -2,7 +2,7 @@
 {% block content %}
   <div class="hero">
     <h2>我的帮助申请</h2>
-    <p class="muted">Track your submitted offers and their statuses.</p>
+    <p class="muted">跟踪你提交的帮助申请及其状态。</p>
   </div>
 
   <div class="offers">
@@ -12,15 +12,15 @@
         {% for o in grouped.pending %}
           <div class="offer-card">
             <div class="offer-card__head">
-              <strong>Request #{{ o.request_id }}</strong>
-              <span class="badge pending">Pending</span>
+              <strong>求助 #{{ o.request_id }}</strong>
+              <span class="badge pending">待处理</span>
             </div>
             <p class="muted">{{ o.message[:160] }}{% if o.message|length > 160 %}...{% endif %}</p>
             <a class="btn btn-small" href="{{ url_for('request_detail', request_id=o.request_id) }}">查看任务详情</a>
           </div>
         {% endfor %}
       {% else %}
-        <p class="muted">No pending offers.</p>
+        <p class="muted">暂无待处理的申请。</p>
       {% endif %}
     </div>
 
@@ -30,15 +30,15 @@
         {% for o in grouped.accepted %}
           <div class="offer-card">
             <div class="offer-card__head">
-              <strong>Request #{{ o.request_id }}</strong>
-              <span class="badge accepted">Accepted</span>
+              <strong>求助 #{{ o.request_id }}</strong>
+              <span class="badge accepted">已接受</span>
             </div>
             <p class="muted">{{ o.message[:160] }}{% if o.message|length > 160 %}...{% endif %}</p>
             <a class="btn btn-small" href="{{ url_for('request_detail', request_id=o.request_id) }}">查看任务详情</a>
           </div>
         {% endfor %}
       {% else %}
-        <p class="muted">No accepted offers.</p>
+        <p class="muted">暂无已接受的申请。</p>
       {% endif %}
     </div>
 
@@ -48,15 +48,15 @@
         {% for o in grouped.rejected %}
           <div class="offer-card">
             <div class="offer-card__head">
-              <strong>Request #{{ o.request_id }}</strong>
-              <span class="badge rejected">Rejected</span>
+              <strong>求助 #{{ o.request_id }}</strong>
+              <span class="badge rejected">已拒绝</span>
             </div>
             <p class="muted">{{ o.message[:160] }}{% if o.message|length > 160 %}...{% endif %}</p>
             <a class="btn btn-small" href="{{ url_for('request_detail', request_id=o.request_id) }}">查看任务详情</a>
           </div>
         {% endfor %}
       {% else %}
-        <p class="muted">No rejected offers.</p>
+        <p class="muted">暂无已拒绝的申请。</p>
       {% endif %}
     </div>
 
@@ -66,15 +66,15 @@
         {% for o in grouped.completed %}
           <div class="offer-card">
             <div class="offer-card__head">
-              <strong>Request #{{ o.request_id }}</strong>
-              <span class="badge completed">Completed</span>
+              <strong>求助 #{{ o.request_id }}</strong>
+              <span class="badge completed">已完成</span>
             </div>
             <p class="muted">{{ o.message[:160] }}{% if o.message|length > 160 %}...{% endif %}</p>
             <a class="btn btn-small" href="{{ url_for('request_detail', request_id=o.request_id) }}">查看任务详情</a>
           </div>
         {% endfor %}
       {% else %}
-        <p class="muted">No completed tasks yet.</p>
+        <p class="muted">暂无已完成的任务。</p>
       {% endif %}
     </div>
   </div>

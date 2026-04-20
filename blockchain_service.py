@@ -4,10 +4,10 @@ from datetime import datetime
 from typing import List, Optional
 
 from flask import current_app
-from sqlalchemy import func
 
 from extensions import db
 from models import Block, Statement
+from web3_service import submit_anchor_transaction
 
 # Configuration: how many statements per block
 DEFAULT_BLOCK_SIZE = 10
@@ -52,6 +52,46 @@ def append_statement(kind: str, payload: dict, user_id: Optional[int] = None) ->
     return st
 
 
+def anchor_block(block: Block, statement_count: int) -> Optional[dict]:
+    if not bool(current_app.config.get("BLOCKCHAIN_ANCHOR_AUTO", False)):
+        return None
+
+    payload = {
+        "source": "dailyhelper_internal_block",
+        "block_id": block.id,
+        "block_index": block.index,
+        "block_hash": block.hash,
+        "statement_count": statement_count,
+        "sealed_at": block.created_at.isoformat() + "Z",
+    }
+    anchor_text = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    try:
+        tx_result = submit_anchor_transaction(anchor_text)
+        append_statement(
+            kind="block_anchor_submitted",
+            payload={
+                **payload,
+                "tx_hash": tx_result.get("tx_hash"),
+                "chain_id": tx_result.get("chain_id"),
+                "tx_status": tx_result.get("status"),
+                "tx_url": tx_result.get("tx_url"),
+                "tx_block_number": tx_result.get("block_number"),
+            },
+            user_id=None,
+        )
+        return tx_result
+    except Exception as e:
+        append_statement(
+            kind="block_anchor_failed",
+            payload={
+                **payload,
+                "error": str(e)[:500],
+            },
+            user_id=None,
+        )
+        return None
+
+
 def maybe_seal_block(limit: Optional[int] = None) -> Optional[Block]:
     """Seal a new block if there are at least `limit` unsealed statements.
     Returns the new Block or None if not enough statements.
@@ -76,4 +116,5 @@ def maybe_seal_block(limit: Optional[int] = None) -> Optional[Block]:
     for s in unsealed:
         s.block_id = block.id
     db.session.commit()
+    anchor_block(block, statement_count=len(unsealed))
     return block

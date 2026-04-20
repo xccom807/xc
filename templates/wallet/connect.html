@@ -223,7 +223,21 @@
 <div class="wallet-container">
   <div class="wallet-header">
     <h1>连接你的钱包</h1>
-    <p>Choose your preferred wallet to connect to DailyHelper and access blockchain features</p>
+    <p>选择你偏好的钱包连接到每日互助平台，使用区块链功能</p>
+  </div>
+  <div class="wallet-info" style="margin-top: 0; margin-bottom: 2rem;">
+    <h3>当前绑定状态</h3>
+    <p id="wallet-status-text">
+      {% if wallet_link and wallet_link.verified_at %}
+        已绑定地址：{{ wallet_link.address }}
+      {% else %}
+        当前未绑定钱包，请选择下方钱包完成签名验证。
+      {% endif %}
+    </p>
+    <button id="disconnect-wallet-btn" class="connect-btn" style="max-width: 280px; {% if not (wallet_link and wallet_link.verified_at) %}display:none;{% endif %}">
+      <i class="fa-solid fa-link-slash"></i>
+      解绑钱包
+    </button>
   </div>
 
   <div class="wallet-options">
@@ -234,17 +248,17 @@
       </div>
       <div class="wallet-name">MetaMask</div>
       <div class="wallet-description">
-        The most popular Web3 wallet with millions of users worldwide
+        全球最受欢迎的 Web3 钱包，拥有数百万用户
       </div>
       <ul class="wallet-features">
-        <li><i class="fa-solid fa-check"></i> Browser extension & mobile app</li>
-        <li><i class="fa-solid fa-check"></i> Multi-network support</li>
-        <li><i class="fa-solid fa-check"></i> Built-in token swap</li>
-        <li><i class="fa-solid fa-check"></i> NFT marketplace access</li>
+        <li><i class="fa-solid fa-check"></i> 浏览器扩展和移动应用</li>
+        <li><i class="fa-solid fa-check"></i> 多网络支持</li>
+        <li><i class="fa-solid fa-check"></i> 内置代币兑换</li>
+        <li><i class="fa-solid fa-check"></i> NFT 市场访问</li>
       </ul>
       <button class="connect-btn metamask">
         <i class="fa-solid fa-fox"></i>
-        Connect MetaMask
+        连接 MetaMask
       </button>
     </div>
 
@@ -255,114 +269,127 @@
       </div>
       <div class="wallet-name">Coinbase Wallet</div>
       <div class="wallet-description">
-        Secure, user-friendly wallet from the world's largest crypto exchange
+        来自全球最大加密货币交易所的安全、易用钱包
       </div>
       <ul class="wallet-features">
-        <li><i class="fa-solid fa-check"></i> Seamless Coinbase integration</li>
-        <li><i class="fa-solid fa-check"></i> Multi-chain support</li>
-        <li><i class="fa-solid fa-check"></i> Enhanced security features</li>
-        <li><i class="fa-solid fa-check"></i> Easy fiat on-ramp</li>
+        <li><i class="fa-solid fa-check"></i> 无缝 Coinbase 集成</li>
+        <li><i class="fa-solid fa-check"></i> 多链支持</li>
+        <li><i class="fa-solid fa-check"></i> 增强安全功能</li>
+        <li><i class="fa-solid fa-check"></i> 便捷法币入金</li>
       </ul>
       <button class="connect-btn coinbase">
         <i class="fa-solid fa-coins"></i>
-        Connect Coinbase Wallet
+        连接 Coinbase 钱包
       </button>
     </div>
   </div>
 
   <div class="wallet-info">
     <h3>为什么要连接钱包？</h3>
-    <p>Connecting your wallet enables you to:</p>
+    <p>连接钱包后你可以：</p>
 
     <div class="wallet-benefits">
       <div class="benefit-item">
         <div class="benefit-icon">
           <i class="fa-solid fa-eye"></i>
         </div>
-        <div class="benefit-title">View Blockchain Activity</div>
-        <div class="benefit-description">See all platform activities recorded on the blockchain in real-time</div>
+        <div class="benefit-title">查看区块链活动</div>
+        <div class="benefit-description">实时查看平台上记录在区块链上的所有活动</div>
       </div>
 
       <div class="benefit-item">
         <div class="benefit-icon">
           <i class="fa-solid fa-shield-alt"></i>
         </div>
-        <div class="benefit-title">Verify Transactions</div>
-        <div class="benefit-description">Verify the authenticity and immutability of all platform interactions</div>
+        <div class="benefit-title">验证交易</div>
+        <div class="benefit-description">验证所有平台交互的真实性和不可篡改性</div>
       </div>
 
       <div class="benefit-item">
         <div class="benefit-icon">
           <i class="fa-solid fa-chart-line"></i>
         </div>
-        <div class="benefit-title">Track Community Impact</div>
-        <div class="benefit-description">Monitor your contributions and the overall community blockchain footprint</div>
+        <div class="benefit-title">追踪社区影响力</div>
+        <div class="benefit-description">监控你的贡献和整个社区的区块链足迹</div>
       </div>
 
       <div class="benefit-item">
         <div class="benefit-icon">
           <i class="fa-solid fa-cube"></i>
         </div>
-        <div class="benefit-title">Admin Blockchain Access</div>
-        <div class="benefit-description">Access detailed blockchain analytics and block inspection tools</div>
+        <div class="benefit-title">管理员区块链访问</div>
+        <div class="benefit-description">访问详细的区块链分析和区块检查工具</div>
       </div>
     </div>
   </div>
 </div>
 
 <script>
-function connectMetaMask() {
-  // Check if MetaMask is installed
-  if (typeof window.ethereum !== 'undefined' && window.ethereum.isMetaMask) {
-    // Request account access to trigger MetaMask extension popup
-    window.ethereum.request({
-      method: 'eth_requestAccounts'
-    })
-    .then(function(accounts) {
-      console.log('Connected to MetaMask:', accounts[0]);
-      // Show success message with connected account
-      showConnectionSuccess('MetaMask', accounts[0]);
-    })
-    .catch(function(error) {
-      console.error('MetaMask connection failed:', error);
-      if (error.code === 4001) {
-        showConnectionError('Connection rejected by user');
-      } else {
-        showConnectionError('Failed to connect to MetaMask: ' + error.message);
-      }
-    });
-  } else {
-    showConnectionError('MetaMask not detected. Please install MetaMask browser extension first.');
+async function connectMetaMask() {
+  if (typeof window.ethereum === 'undefined' || !window.ethereum.isMetaMask) {
+    showConnectionError('未检测到 MetaMask。请先安装 MetaMask 浏览器扩展。');
+    return;
   }
+  await connectAndVerifyWallet('MetaMask');
 }
 
-function connectCoinbase() {
-  // Check if Coinbase Wallet is installed
-  if (typeof window.ethereum !== 'undefined' && window.ethereum.isCoinbaseWallet) {
-    // Request account access to trigger Coinbase Wallet extension popup
-    window.ethereum.request({
-      method: 'eth_requestAccounts'
-    })
-    .then(function(accounts) {
-      console.log('Connected to Coinbase Wallet:', accounts[0]);
-      // Show success message with connected account
-      showConnectionSuccess('Coinbase Wallet', accounts[0]);
-    })
-    .catch(function(error) {
-      console.error('Coinbase Wallet connection failed:', error);
-      if (error.code === 4001) {
-        showConnectionError('Connection rejected by user');
-      } else {
-        showConnectionError('Failed to connect to Coinbase Wallet: ' + error.message);
-      }
+async function connectCoinbase() {
+  if (typeof window.ethereum === 'undefined' || !window.ethereum.isCoinbaseWallet) {
+    showConnectionError('未检测到 Coinbase 钱包。请先安装 Coinbase 钱包浏览器扩展。');
+    return;
+  }
+  await connectAndVerifyWallet('Coinbase Wallet');
+}
+
+async function connectAndVerifyWallet(walletName) {
+  try {
+    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    if (!accounts || !accounts.length) {
+      showConnectionError('未返回钱包账户。');
+      return;
+    }
+    const address = accounts[0];
+    const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+
+    const challengeRes = await fetch('/wallet/challenge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address })
     });
-  } else {
-    showConnectionError('Coinbase Wallet not detected. Please install Coinbase Wallet browser extension first.');
+    const challengeData = await challengeRes.json();
+    if (!challengeRes.ok || !challengeData.ok) {
+      showConnectionError(challengeData.error || 'Failed to create verification challenge.');
+      return;
+    }
+
+    const signature = await window.ethereum.request({
+      method: 'personal_sign',
+      params: [challengeData.message, address]
+    });
+
+    const verifyRes = await fetch('/wallet/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address, signature, chain_id: chainId })
+    });
+    const verifyData = await verifyRes.json();
+    if (!verifyRes.ok || !verifyData.ok) {
+      showConnectionError(verifyData.error || 'Signature verification failed.');
+      return;
+    }
+
+    showConnectionSuccess(walletName, verifyData.address);
+    refreshWalletStatus();
+  } catch (error) {
+    if (error && error.code === 4001) {
+      showConnectionError('用户拒绝了连接或签名请求');
+      return;
+    }
+    showConnectionError('连接钱包失败: ' + (error.message || error));
   }
 }
 
 function showConnectionSuccess(walletName, account) {
-  // Create and show success notification
   const notification = document.createElement('div');
   notification.className = 'connection-success';
   notification.innerHTML = `
@@ -381,17 +408,16 @@ function showConnectionSuccess(walletName, account) {
     ">
       <div style="display: flex; align-items: center; gap: 0.5rem;">
         <i class="fa-solid fa-check-circle"></i>
-        <span>Successfully connected to ${walletName}!</span>
+        <span>已成功连接 ${walletName}！</span>
       </div>
       <div style="font-size: 0.8rem; margin-top: 0.5rem; opacity: 0.9;">
-        Account: ${account.substring(0, 6)}...${account.substring(account.length - 4)}
+        账户: ${account.substring(0, 6)}...${account.substring(account.length - 4)}
       </div>
     </div>
   `;
 
   document.body.appendChild(notification);
 
-  // Auto-remove after 5 seconds
   setTimeout(() => {
     if (notification.parentNode) {
       notification.parentNode.removeChild(notification);
@@ -400,7 +426,6 @@ function showConnectionSuccess(walletName, account) {
 }
 
 function showConnectionError(message) {
-  // Create and show error notification
   const notification = document.createElement('div');
   notification.className = 'connection-error';
   notification.innerHTML = `
@@ -419,7 +444,7 @@ function showConnectionError(message) {
     ">
       <div style="display: flex; align-items: center; gap: 0.5rem;">
         <i class="fa-solid fa-exclamation-triangle"></i>
-        <span>Connection Failed</span>
+        <span>连接失败</span>
       </div>
       <div style="font-size: 0.9rem; margin-top: 0.5rem; opacity: 0.9;">
         ${message}
@@ -429,7 +454,6 @@ function showConnectionError(message) {
 
   document.body.appendChild(notification);
 
-  // Auto-remove after 7 seconds
   setTimeout(() => {
     if (notification.parentNode) {
       notification.parentNode.removeChild(notification);
@@ -437,18 +461,55 @@ function showConnectionError(message) {
   }, 7000);
 }
 
-// Add click handlers to wallet option cards
+async function refreshWalletStatus() {
+  const statusText = document.getElementById('wallet-status-text');
+  const disconnectBtn = document.getElementById('disconnect-wallet-btn');
+  try {
+    const res = await fetch('/wallet/me');
+    const data = await res.json();
+    if (data && data.verified && data.address) {
+      statusText.textContent = `已绑定地址：${data.address}`;
+      disconnectBtn.style.display = 'inline-flex';
+    } else {
+      statusText.textContent = '当前未绑定钱包，请选择下方钱包完成签名验证。';
+      disconnectBtn.style.display = 'none';
+    }
+  } catch (error) {
+    statusText.textContent = '无法获取钱包绑定状态，请稍后重试。';
+    disconnectBtn.style.display = 'none';
+  }
+}
+
+async function disconnectWallet() {
+  try {
+    const res = await fetch('/wallet/disconnect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      showConnectionError(data.error || '解绑失败，请重试。');
+      return;
+    }
+    showConnectionSuccess('DailyHelper', 'Wallet disconnected');
+    refreshWalletStatus();
+  } catch (error) {
+    showConnectionError('解绑失败：' + (error.message || error));
+  }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
-  const metamaskCard = document.querySelector('.wallet-option.metamask');
-  const coinbaseCard = document.querySelector('.wallet-option.coinbase');
+  const disconnectBtn = document.getElementById('disconnect-wallet-btn');
 
-  if (metamaskCard) {
-    metamaskCard.addEventListener('click', connectMetaMask);
+  if (disconnectBtn) {
+    disconnectBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      disconnectWallet();
+    });
   }
 
-  if (coinbaseCard) {
-    coinbaseCard.addEventListener('click', connectCoinbase);
-  }
+  refreshWalletStatus();
 });
 </script>
 {% endblock %}

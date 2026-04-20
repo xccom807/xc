@@ -2,23 +2,23 @@
 {% block content %}
   <section class="admin-hero admin-card">
     <h2>管理员仪表盘</h2>
-    <p class="muted">Overview of platform health and recent activity.</p>
+    <p class="muted">平台运行状况和近期活动概览。</p>
   </section>
 
   <div class="admin-grid">
     <section class="admin-card">
       <h3>总览</h3>
       <div class="admin-stats">
-        <div class="stat"><div class="num">{{ totals.users }}</div><div class="label">Users</div></div>
-        <div class="stat"><div class="num">{{ totals.requests }}</div><div class="label">Total Requests</div></div>
-        <div class="stat"><div class="num">{{ totals.open_requests }}</div><div class="label">Open</div></div>
-        <div class="stat"><div class="num">{{ totals.completed_requests }}</div><div class="label">Completed</div></div>
-        <div class="stat"><div class="num">{{ totals.flagged }}</div><div class="label">Flagged</div></div>
+        <div class="stat"><div class="num">{{ totals.users }}</div><div class="label">用户数</div></div>
+        <div class="stat"><div class="num">{{ totals.requests }}</div><div class="label">总求助数</div></div>
+        <div class="stat"><div class="num">{{ totals.open_requests }}</div><div class="label">待匹配</div></div>
+        <div class="stat"><div class="num">{{ totals.completed_requests }}</div><div class="label">已完成</div></div>
+        <div class="stat"><div class="num">{{ totals.flagged }}</div><div class="label">被标记</div></div>
       </div>
       <div class="actions">
-        <a class="btn" href="{{ url_for('admin_users') }}">Manage Users</a>
-        <a class="btn secondary" href="{{ url_for('admin_moderation') }}">Moderation</a>
-        <a class="btn secondary" href="{{ url_for('blockchain_blocks') }}">View Blockchain</a>
+        <a class="btn" href="{{ url_for('admin_users') }}">管理用户</a>
+        <a class="btn secondary" href="{{ url_for('admin_moderation') }}">内容审核</a>
+        <a class="btn secondary" href="{{ url_for('blockchain_blocks') }}">查看区块链</a>
       </div>
     </section>
 
@@ -26,7 +26,7 @@
       <h3>近期注册</h3>
       {% if recent_signups %}
         <table class="admin-table">
-          <thead><tr><th>User</th><th>Email</th><th>Joined</th></tr></thead>
+          <thead><tr><th>用户</th><th>邮箱</th><th>注册时间</th></tr></thead>
           <tbody>
             {% for u in recent_signups %}
               <tr>
@@ -38,7 +38,7 @@
           </tbody>
         </table>
       {% else %}
-        <p class="muted">No recent signups.</p>
+        <p class="muted">暂无近期注册。</p>
       {% endif %}
     </section>
 
@@ -46,7 +46,7 @@
       <h3>活动日志</h3>
       {% if recent_activity %}
         <table class="admin-table">
-          <thead><tr><th>Time</th><th>User</th><th>Kind</th><th>Payload</th></tr></thead>
+          <thead><tr><th>时间</th><th>用户</th><th>类型</th><th>数据</th></tr></thead>
           <tbody>
             {% for s in recent_activity %}
               <tr>
@@ -59,7 +59,7 @@
           </tbody>
         </table>
       {% else %}
-        <p class="muted">No recent activity found.</p>
+        <p class="muted">暂无近期活动记录。</p>
       {% endif %}
     </section>
   </div>

@@ -52,6 +52,24 @@ class User(UserMixin, db.Model):
         return check_password_hash(self.password_hash, password)
 
 
+class WalletLink(db.Model):
+    __tablename__ = "wallet_links"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, unique=True, index=True)
+    address = db.Column(db.String(42), nullable=False, unique=True, index=True)
+    challenge_nonce = db.Column(db.String(64), nullable=True)
+    challenge_issued_at = db.Column(db.DateTime, nullable=True)
+    verified_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = db.relationship("User", backref=db.backref("wallet_link", uselist=False))
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<WalletLink user={self.user_id} address={self.address}>"
+
+
 class HelpRequest(db.Model):
     __tablename__ = "help_requests"
 

@@ -2,27 +2,52 @@
 {% block content %}
   <div class="card">
     <h2>区块链状态</h2>
-    <p class="muted">RPC URL is {{ rpc_url }}.</p>
+    <p class="muted">RPC URL 状态: {{ rpc_url }}。</p>
     {% if error %}
       <div class="flash error">{{ error }}</div>
     {% endif %}
     <ul>
-      <li><strong>Connected:</strong> {{ 'Yes' if ok else 'No' }}</li>
+      <li><strong>连接状态:</strong> {{ '已连接' if ok else '未连接' }}</li>
       {% if ok %}
-        <li><strong>Client:</strong> {{ net_info.client }}</li>
-        <li><strong>Latest block:</strong> {{ latest_block }}</li>
+        <li><strong>客户端:</strong> {{ net_info.client }}</li>
+        <li><strong>最新区块:</strong> {{ latest_block }}</li>
+        <li><strong>链 ID:</strong> {{ chain_id }}</li>
       {% endif %}
+      <li><strong>签名者:</strong> {{ signer_address or '未配置' }}</li>
     </ul>
+    {% if signer_error %}
+      <div class="flash error">{{ signer_error }}</div>
+    {% endif %}
   </div>
 
   <div class="section" style="margin-top:1rem;">
     <h3>查询地址余额</h3>
     <form method="get" action="{{ url_for('web3_balance') }}">
       <div class="field">
-        <label>Address</label>
+        <label>地址</label>
         <input class="input" type="text" name="address" placeholder="0x..." />
       </div>
-      <button class="btn" type="submit">Check Balance</button>
+      <button class="btn" type="submit">查询余额</button>
     </form>
+  </div>
+
+  <div class="section" style="margin-top:1rem;">
+    <h3>真实上链（写入交易 data）</h3>
+    <form method="post" action="{{ url_for('web3_status') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="field">
+        <label>上链文本</label>
+        <textarea class="input" name="anchor_text" rows="4" placeholder="输入要写入链上的文本（将作为交易 data）"></textarea>
+      </div>
+      <button class="btn" type="submit">提交上链交易</button>
+    </form>
+    {% if anchor_result %}
+      <div style="margin-top: 1rem;">
+        <p><strong>交易哈希:</strong> {{ anchor_result.tx_hash }}</p>
+        {% if anchor_result.tx_url %}
+          <p><a href="{{ anchor_result.tx_url }}" target="_blank" rel="noopener">在区块浏览器查看交易</a></p>
+        {% endif %}
+      </div>
+    {% endif %}
   </div>
 {% endblock %}

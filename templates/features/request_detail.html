@@ -4,14 +4,14 @@
     <section class="card">
       <div class="hero">
         <h2>{{ req.title }}</h2>
-        <p class="muted">Posted {{ req.created_at.strftime('%Y-%m-%d %H:%M') }} · Category: {{ req.category or 'General' }}</p>
+        <p class="muted">发布于 {{ req.created_at.strftime('%Y-%m-%d %H:%M') }} · 分类: {{ req.category or '综合' }}</p>
       </div>
 
       <div class="request-card__meta" style="margin:.25rem 0 1rem;">
         {% if req.location %}<span class="tag"><i class="fa-solid fa-location-dot"></i> {{ req.location }}</span>{% endif %}
         {% if req.time_needed %}<span class="tag"><i class="fa-regular fa-clock"></i> {{ req.time_needed }}</span>{% endif %}
         {% if req.is_volunteer %}
-          <span class="tag volunteer"><i class="fa-solid fa-hand-holding-heart"></i> Volunteer</span>
+          <span class="tag volunteer"><i class="fa-solid fa-hand-holding-heart"></i> 志愿服务</span>
         {% elif req.price is not none %}
           <span class="tag price"><i class="fa-solid fa-coins"></i> {{ '%.2f'|format(req.price) }}</span>
         {% endif %}
@@ -32,7 +32,7 @@
                     <div>
                       <strong>{{ offer.helper.full_name or offer.helper.username }}</strong>
                       <div class="muted" style="font-size:.85rem;">{{ offer.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
-                      <div class="reputation-badge">Reputation: {{ '%.1f'|format(offer.helper.reputation_score or 0) }}</div>
+                      <div class="reputation-badge">信誉分: {{ '%.1f'|format(offer.helper.reputation_score or 0) }}</div>
                     </div>
                     <span class="badge {{ offer.status }}">{{ offer.status|capitalize }}</span>
                   </div>
@@ -53,14 +53,14 @@
               {% endfor %}
             </div>
           {% else %}
-            <p class="muted">No offers received yet. Helpers will be able to submit offers soon!</p>
+            <p class="muted">暂未收到帮助申请。帮助者很快就能提交申请！</p>
           {% endif %}
         </div>
 
         {% if req.status == 'in_progress' %}
           <div class="section" style="margin-top:1rem;">
             <h3>任务管理</h3>
-            <p>Your task is currently in progress. Once completed, click the button below to mark it as finished.</p>
+            <p>您的任务正在进行中。完成后，请点击下方按钮将其标记为已完成。</p>
             <form method="post" style="margin-top: 1rem;">
               {{ complete_form.hidden_tag() }}
               {{ complete_form.submit(
@@ -89,14 +89,14 @@
                     </div>
                     <small class="muted">{{ rv.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
                   </div>
-                  <span class="badge" style="margin-left:auto;">Verified Task</span>
+                  <span class="badge" style="margin-left:auto;">已验证任务</span>
                 </div>
                 {% if rv.comment %}<p class="muted">{{ rv.comment }}</p>{% endif %}
               </div>
             {% endfor %}
           </div>
         {% else %}
-          <p class="muted">No reviews for this task yet.</p>
+          <p class="muted">该任务暂无评价。</p>
         {% endif %}
       </div>
     </section>
@@ -106,12 +106,12 @@
         <div class="avatar"></div>
         <div>
           <strong>{{ requester.full_name or requester.username }}</strong>
-          <div class="muted" style="font-size:.85rem;">Reputation: {{ '%.1f'|format(requester.reputation_score or 0) }}</div>
+          <div class="muted" style="font-size:.85rem;">信誉分: {{ '%.1f'|format(requester.reputation_score or 0) }}</div>
         </div>
       </div>
 
       {% if my_offer %}
-        <div class="flash info" style="margin-top: .75rem;">You already submitted an offer. Current status: <strong>{{ my_offer.status|capitalize }}</strong></div>
+        <div class="flash info" style="margin-top: .75rem;">您已提交过帮助申请。当前状态: <strong>{{ my_offer.status|capitalize }}</strong></div>
       {% endif %}
 
       {% if not is_requester %}
@@ -119,19 +119,19 @@
         <form method="post" novalidate>
           {{ form.hidden_tag() }}
           <div class="field">
-            <label>Message to requester</label>
-            {{ form.message(class='input', rows='4', placeholder='Explain why you can help...') }}
+            <label>给求助者的留言</label>
+            {{ form.message(class='input', rows='4', placeholder='说明你为什么能提供帮助…') }}
             {% for e in form.message.errors %}<div class="flash error">{{ e }}</div>{% endfor %}
           </div>
           <div class="field" style="display:flex; align-items:center; gap:.6rem;">
-            {{ form.availability() }} <label style="margin:0">I am available and can start</label>
+            {{ form.availability() }} <label style="margin:0">我有空并且可以开始</label>
           </div>
           <div class="field">
-            <label>Expected completion timeframe</label>
-            {{ form.timeframe(class='input', placeholder='e.g., within 2 days') }}
+            <label>预计完成时间</label>
+            {{ form.timeframe(class='input', placeholder='例如：2天内') }}
           </div>
           <div class="actions">
-            {{ form.submit(class='btn', value='Submit Offer') }}
+            {{ form.submit(class='btn', value='提交帮助') }}
           </div>
         </form>
       {% endif %}
@@ -141,16 +141,16 @@
         <form method="post" novalidate>
           {{ review_form.hidden_tag() }}
           <div class="field">
-            <label>Rating</label>
+            <label>评分</label>
             {{ review_form.rating(class='input') }}
             {% for e in review_form.rating.errors %}<div class="flash error">{{ e }}</div>{% endfor %}
           </div>
           <div class="field">
-            <label>Review</label>
-            {{ review_form.comment(class='input', rows='3', placeholder='Share your experience...') }}
+            <label>评价</label>
+            {{ review_form.comment(class='input', rows='3', placeholder='分享你的体验…') }}
           </div>
           <div class="actions">
-            {{ review_form.submit(class='btn', value='Submit Review') }}
+            {{ review_form.submit(class='btn', value='提交评价') }}
           </div>
         </form>
       {% endif %}

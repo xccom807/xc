@@ -5,7 +5,7 @@
       <div class="avatar" {% if profile_user.avatar_url %}style="background-image: url({{ profile_user.avatar_url|tojson }});"{% endif %}></div>
       <div>
         <h2 style="margin:0;">{{ profile_user.full_name or profile_user.username }}</h2>
-        <div class="muted">{{ profile_user.location or 'Unknown' }}</div>
+        <div class="muted">{{ profile_user.location or '未知' }}</div>
         <div class="rep">
           <span class="stars">
             {% set s = (profile_user.reputation_score or 0) // 20 %}
@@ -15,7 +15,7 @@
           </span>
           <span class="tier">{{ tier }}</span>
         </div>
-        <div class="muted">Joined {{ profile_user.created_at.strftime('%Y-%m-%d') }}</div>
+        <div class="muted">加入于 {{ profile_user.created_at.strftime('%Y-%m-%d') }}</div>
       </div>
     </div>
     {% if profile_user.bio %}<p style="margin-top:1rem; white-space:pre-wrap;">{{ profile_user.bio }}</p>{% endif %}
@@ -36,6 +36,28 @@
           <li>邮箱: {{ profile_user.email }}</li>
           {% if profile_user.phone %}<li>电话: {{ profile_user.phone }}</li>{% endif %}
         </ul>
+      </div>
+    </div>
+    <div class="card" style="margin-top:1rem;">
+      <h3>链上信誉证明</h3>
+      {% if latest_reputation_anchor %}
+        <p class="muted">最近上链时间：{{ latest_reputation_anchor.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+        <p><strong>快照哈希:</strong> {{ latest_reputation_anchor.payload.get("snapshot_hash") }}</p>
+        <p><strong>交易哈希:</strong> {{ latest_reputation_anchor.payload.get("tx_hash") }}</p>
+        {% if latest_reputation_anchor.payload.get("tx_url") %}
+          <p><a href="{{ latest_reputation_anchor.payload.get('tx_url') }}" target="_blank" rel="noopener">查看链上交易</a></p>
+        {% endif %}
+      {% else %}
+        <p class="muted">尚未生成链上信誉证明。</p>
+      {% endif %}
+      <div class="actions" style="margin-top:0.75rem;">
+        <a class="btn secondary" href="{{ url_for('reputation_proof', username=profile_user.username) }}">查看可验证快照(JSON)</a>
+        {% if can_anchor_reputation %}
+          <form method="post" action="{{ url_for('anchor_my_reputation') }}" style="display:inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn" type="submit">将当前信誉快照上链</button>
+          </form>
+        {% endif %}
       </div>
     </div>
   </section>

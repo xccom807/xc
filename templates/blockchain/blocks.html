@@ -225,7 +225,7 @@
 <div class="blockchain-container">
   <div class="stats-header">
     <h1>区块链区块</h1>
-    <p class="total-blocks">{{ total_blocks }} total blocks mined</p>
+    <p class="total-blocks">共 {{ total_blocks }} 个区块已生成</p>
   </div>
 
   {% if blocks_with_counts %}
@@ -234,26 +234,26 @@
         <div class="block-card">
           <div class="block-header">
             <span class="block-index">Block #{{ block.index }}</span>
-            <span class="statements-count">{{ statement_count }} statements</span>
+            <span class="statements-count">{{ statement_count }} 条记录</span>
           </div>
 
           <div class="block-hash">
-            <strong>Hash:</strong> {{ block.hash }}
+            <strong>哈希:</strong> {{ block.hash }}
           </div>
 
           {% if block.prev_hash %}
             <div class="block-hash" style="margin-bottom: 2rem;">
-              <strong>Previous Hash:</strong> {{ block.prev_hash }}
+              <strong>上一区块哈希:</strong> {{ block.prev_hash }}
             </div>
           {% endif %}
 
           <div class="block-meta">
             <div class="meta-item">
-              <div class="meta-label">Created At</div>
+              <div class="meta-label">创建时间</div>
               <div class="meta-value">{{ block.created_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}</div>
             </div>
             <div class="meta-item">
-              <div class="meta-label">Block ID</div>
+              <div class="meta-label">区块 ID</div>
               <div class="meta-value">{{ block.id }}</div>
             </div>
           </div>
@@ -269,7 +269,7 @@
                 <div class="statement-item">
                   <div class="statement-kind">{{ statement.kind | title }}</div>
                   {% if statement.user %}
-                    <div class="statement-user">By: {{ statement.user.username }}</div>
+                    <div class="statement-user">用户: {{ statement.user.username }}</div>
                   {% endif %}
                   <div class="statement-payload">{{ statement.payload | tojson }}</div>
                   <div class="statement-time">{{ statement.created_at.strftime('%H:%M:%S') }}</div>
@@ -284,20 +284,20 @@
     <!-- Pagination -->
     <div class="pagination">
       {% if pagination.has_prev %}
-        <a href="{{ url_for('blockchain_blocks', page=pagination.prev_num) }}">← Previous</a>
+        <a href="{{ url_for('blockchain_blocks', page=pagination.prev_num) }}">← 上一页</a>
       {% endif %}
 
-      <span class="current">Page {{ pagination.page }} of {{ pagination.pages }}</span>
+      <span class="current">第 {{ pagination.page }} 页，共 {{ pagination.pages }} 页</span>
 
       {% if pagination.has_next %}
-        <a href="{{ url_for('blockchain_blocks', page=pagination.next_num) }}">Next →</a>
+        <a href="{{ url_for('blockchain_blocks', page=pagination.next_num) }}">下一页 →</a>
       {% endif %}
     </div>
   {% else %}
     <div class="no-blocks">
       <i class="fa-solid fa-cube"></i>
       <h2>暂无区块</h2>
-      <p>Blockchain blocks will appear here once user activities start generating statements.</p>
+      <p>当用户活动开始生成记录后，区块链区块将显示在此处。</p>
     </div>
   {% endif %}
 </div>

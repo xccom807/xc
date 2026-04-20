@@ -3,43 +3,43 @@
   <section class="card">
     <div class="hero">
       <h2>提交公益组织信息</h2>
-      <p class="muted">Share details about your organization. Our team will verify your submission before it goes live.</p>
+      <p class="muted">填写你的组织信息。我们的团队将在审核通过后发布。</p>
     </div>
     <form method="post" novalidate>
       {{ form.hidden_tag() }}
       <div class="field">
-        <label>NGO Name</label>
+        <label>公益组织名称</label>
         {{ form.name(class='input') }}
         {% for e in form.name.errors %}<div class="flash error">{{ e }}</div>{% endfor %}
       </div>
       <div class="field">
-        <label>Description</label>
+        <label>描述</label>
         {{ form.description(class='input', rows='5') }}
         {% for e in form.description.errors %}<div class="flash error">{{ e }}</div>{% endfor %}
       </div>
       <div class="grid grid-2">
         <div class="field">
-          <label>Category</label>
+          <label>分类</label>
           {{ form.category(class='input') }}
         </div>
         <div class="field">
-          <label>Location</label>
+          <label>所在地</label>
           {{ form.location(class='input') }}
         </div>
       </div>
       <div class="grid grid-2">
         <div class="field">
-          <label>Contact Email</label>
+          <label>联系邮箱</label>
           {{ form.contact_email(class='input') }}
           {% for e in form.contact_email.errors %}<div class="flash error">{{ e }}</div>{% endfor %}
         </div>
         <div class="field">
-          <label>Website</label>
+          <label>网站</label>
           {{ form.website(class='input', placeholder='https://...') }}
         </div>
       </div>
       <div class="actions">
-        {{ form.submit(class='btn', value='Submit for Approval') }}
+        {{ form.submit(class='btn', value='提交审核') }}
       </div>
     </form>
   </section>

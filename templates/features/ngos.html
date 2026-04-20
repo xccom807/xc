@@ -2,9 +2,9 @@
 {% block content %}
   <div class="ngo-hero">
     <h2>公益组织目录</h2>
-    <p class="muted">Discover and support trusted organizations creating real community impact.</p>
+    <p class="muted">发现并支持那些为社区创造真正影响力的可信组织。</p>
     <div class="actions">
-      <a class="btn" href="{{ url_for('ngo_submit') }}"><i class="fa-solid fa-building-ngo"></i> Submit Your NGO</a>
+      <a class="btn" href="{{ url_for('ngo_submit') }}"><i class="fa-solid fa-building-ngo"></i> 提交你的公益组织</a>
     </div>
   </div>
 
@@ -13,28 +13,28 @@
       <h3 style="margin-top:0;">筛选公益组织</h3>
       <form method="get">
         <div class="field">
-          <label>Category</label>
+          <label>分类</label>
           <select class="input" name="category">
-            <option value="">All</option>
+            <option value="">全部</option>
             {% for c in categories %}
               <option value="{{ c }}" {% if filters.category == c %}selected{% endif %}>{{ c }}</option>
             {% endfor %}
           </select>
         </div>
         <div class="field">
-          <label>Location</label>
-          <input class="input" type="text" name="location" value="{{ filters.location }}" placeholder="City/Area" />
+          <label>位置</label>
+          <input class="input" type="text" name="location" value="{{ filters.location }}" placeholder="城市/区域" />
         </div>
         <div class="field">
-          <label>Sort by</label>
+          <label>排序方式</label>
           <select class="input" name="sort">
-            <option value="newest" {% if filters.sort == 'newest' %}selected{% endif %}>Newest</option>
-            <option value="name" {% if filters.sort == 'name' %}selected{% endif %}>Name A-Z</option>
+            <option value="newest" {% if filters.sort == 'newest' %}selected{% endif %}>最新</option>
+            <option value="name" {% if filters.sort == 'name' %}selected{% endif %}>名称 A-Z</option>
           </select>
         </div>
         <div class="actions">
-          <button class="btn" type="submit"><i class="fa-solid fa-filter"></i> Apply</button>
-          <a class="btn secondary" href="{{ url_for('ngos') }}">Reset</a>
+          <button class="btn" type="submit"><i class="fa-solid fa-filter"></i> 应用</button>
+          <a class="btn secondary" href="{{ url_for('ngos') }}">重置</a>
         </div>
       </form>
     </aside>
@@ -52,13 +52,13 @@
                 <div class="avatar"></div>
                 <div>
                   <h3 style="margin:0;">{{ n.name }} {% if n.verified_status %}<span class="verified"><i class="fa-solid fa-circle-check"></i> 已认证</span>{% endif %}</h3>
-                  <div class="muted" style="font-size:.9rem;">{{ n.category or 'General' }} · {{ n.location or 'Anywhere' }}</div>
+                  <div class="muted" style="font-size:.9rem;">{{ n.category or '综合' }} · {{ n.location or '不限地区' }}</div>
                 </div>
               </div>
               <p class="muted">{{ n.description[:200] }}{% if n.description|length > 200 %}...{% endif %}</p>
               <div class="actions">
-                <a class="btn" href="{{ url_for('ngo_detail', ngo_id=n.id) }}">Learn More</a>
-                {% if n.website %}<a class="btn secondary" href="{{ n.website }}" target="_blank" rel="noopener">Support</a>{% endif %}
+                <a class="btn" href="{{ url_for('ngo_detail', ngo_id=n.id) }}">了解更多</a>
+                {% if n.website %}<a class="btn secondary" href="{{ n.website }}" target="_blank" rel="noopener">支持</a>{% endif %}
               </div>
             </div>
           {% endfor %}
@@ -66,20 +66,20 @@
 
         <div class="pagination">
           {% if pagination.has_prev %}
-            <a class="btn secondary" href="{{ url_for('ngos', page=pagination.prev_num, **filters) }}">Previous</a>
+            <a class="btn secondary" href="{{ url_for('ngos', page=pagination.prev_num, **filters) }}">上一页</a>
           {% else %}
-            <span class="btn secondary" style="opacity:.6; pointer-events:none;">Previous</span>
+            <span class="btn secondary" style="opacity:.6; pointer-events:none;">上一页</span>
           {% endif %}
-          <span class="muted">Page {{ pagination.page }} of {{ pagination.pages }}</span>
+          <span class="muted">第 {{ pagination.page }} 页，共 {{ pagination.pages }} 页</span>
           {% if pagination.has_next %}
-            <a class="btn secondary" href="{{ url_for('ngos', page=pagination.next_num, **filters) }}">Next</a>
+            <a class="btn secondary" href="{{ url_for('ngos', page=pagination.next_num, **filters) }}">下一页</a>
           {% else %}
-            <span class="btn secondary" style="opacity:.6; pointer-events:none;">Next</span>
+            <span class="btn secondary" style="opacity:.6; pointer-events:none;">下一页</span>
           {% endif %}
         </div>
       {% else %}
         <div class="card" style="margin-top:1rem;">
-          <p class="muted">No NGOs found. Try a different filter or check back later.</p>
+          <p class="muted">未找到公益组织。请尝试其他筛选条件或稍后再来。</p>
         </div>
       {% endif %}
     </section>

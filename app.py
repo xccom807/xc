@@ -1,4 +1,6 @@
-from datetime import datetime
+from datetime import datetime, timedelta
+import hashlib
+import json
 from flask import Flask, render_template, redirect, url_for, flash, abort, request, jsonify
 from flask_login import (
     AnonymousUserMixin,
@@ -8,10 +10,14 @@ from flask_login import (
     current_user,
 )
 from extensions import db, login_manager, csrf
-from web3_service import init_web3, get_web3
+from web3_service import init_web3, get_web3, submit_anchor_transaction, get_signer_address
 import logging
+import secrets
 from flask_scss import Scss
 from blockchain_service import append_statement, maybe_seal_block
+from eth_account import Account
+from eth_account.messages import encode_defunct
+from web3 import Web3
 
 
 def create_app() -> Flask:
@@ -75,6 +81,8 @@ def create_app() -> Flask:
 
     login_manager.anonymous_user = _AnonymousUser
     login_manager.login_view = "login"
+    login_manager.login_message = "请先登录后再访问该页面。"
+    login_manager.login_message_category = "info"
 
     # ------------------
     # Admin utilities
@@ -116,13 +124,51 @@ def create_app() -> Flask:
         return render_template("about.html")
 
     # Web3 routes
-    @app.route("/web3")
+    @app.route("/web3", methods=["GET", "POST"])
     def web3_status():
         w3 = get_web3()
         ok = False
         net_info = {}
         latest_block = None
         error = None
+        anchor_result = None
+        signer_address = None
+        signer_error = None
+        chain_id = None
+        try:
+            signer_address = get_signer_address()
+            if app.config.get("ETH_SIGNER_PRIVATE_KEY") and not signer_address:
+                signer_error = "Signer private key format is invalid."
+        except Exception:
+            signer_address = None
+            signer_error = "Signer initialization failed."
+
+        if request.method == "POST":
+            anchor_text = str(request.form.get("anchor_text", "")).strip()
+            if not anchor_text:
+                flash("请输入需要上链的内容。", "error")
+            else:
+                try:
+                    anchor_result = submit_anchor_transaction(anchor_text)
+                    try:
+                        append_statement(
+                            kind="onchain_anchor_submitted",
+                            payload={
+                                "tx_hash": anchor_result.get("tx_hash"),
+                                "chain_id": anchor_result.get("chain_id"),
+                                "tx_status": anchor_result.get("status"),
+                                "tx_url": anchor_result.get("tx_url"),
+                                "payload_size": len(anchor_text),
+                            },
+                            user_id=getattr(current_user, "id", None) if current_user.is_authenticated else None,
+                        )
+                        maybe_seal_block()
+                    except Exception:
+                        pass
+                    flash(f"已提交链上交易: {anchor_result.get('tx_hash')}", "success")
+                except Exception as e:  # noqa: BLE001
+                    flash(f"上链失败: {e}", "error")
+
         if w3 is not None:
             try:
                 ok = w3.is_connected()
@@ -131,6 +177,7 @@ def create_app() -> Flask:
                         "client": w3.client_version,
                     }
                     latest_block = w3.eth.block_number
+                    chain_id = int(w3.eth.chain_id)
             except Exception as e:  # noqa: BLE001
                 error = str(e)
         return render_template(
@@ -138,6 +185,10 @@ def create_app() -> Flask:
             ok=ok,
             net_info=net_info,
             latest_block=latest_block,
+            chain_id=chain_id,
+            signer_address=signer_address,
+            signer_error=signer_error,
+            anchor_result=anchor_result,
             rpc_url=("configured" if app.config.get("ETH_RPC_URL") else "not set"),
             error=error,
         )
@@ -157,8 +208,168 @@ def create_app() -> Flask:
                 error = str(e)
         return jsonify({"address": addr, "balance_eth": str(balance_eth) if balance_eth is not None else None, "error": error})
     @app.route("/connect-wallet")
+    @login_required
     def connect_wallet():
-        return render_template("wallet/connect.html")
+        from models import WalletLink
+
+        wallet_link = WalletLink.query.filter_by(user_id=current_user.id).one_or_none()
+        return render_template("wallet/connect.html", wallet_link=wallet_link)
+
+    @app.route("/wallet/me")
+    @login_required
+    def wallet_me():
+        from models import WalletLink
+
+        wallet_link = WalletLink.query.filter_by(user_id=current_user.id).one_or_none()
+        return jsonify(
+            {
+                "address": wallet_link.address if wallet_link and wallet_link.verified_at else None,
+                "verified": bool(wallet_link and wallet_link.verified_at),
+                "verified_at": wallet_link.verified_at.isoformat() if wallet_link and wallet_link.verified_at else None,
+            }
+        )
+
+    @app.route("/wallet/challenge", methods=["POST"])
+    @csrf.exempt
+    @login_required
+    def wallet_challenge():
+        from models import WalletLink
+
+        payload = request.get_json(silent=True) or {}
+        raw_address = str(payload.get("address", "")).strip()
+        if not raw_address or not Web3.is_address(raw_address):
+            return jsonify({"ok": False, "error": "Invalid wallet address."}), 400
+
+        address = Web3.to_checksum_address(raw_address)
+        existing_by_address = WalletLink.query.filter_by(address=address).one_or_none()
+        if existing_by_address and existing_by_address.user_id != current_user.id:
+            return jsonify({"ok": False, "error": "This wallet address is already linked to another account."}), 409
+
+        nonce = secrets.token_hex(16)
+        issued_at = datetime.utcnow()
+        message = (
+            "DailyHelper Wallet Verification\n\n"
+            f"User ID: {current_user.id}\n"
+            f"Address: {address}\n"
+            f"Nonce: {nonce}\n"
+            f"Issued At: {issued_at.isoformat()}Z\n"
+            f"Domain: {request.host}"
+        )
+
+        wallet_link = WalletLink.query.filter_by(user_id=current_user.id).one_or_none()
+        if wallet_link is None:
+            wallet_link = WalletLink(user_id=current_user.id, address=address)
+            db.session.add(wallet_link)
+        wallet_link.address = address
+        wallet_link.challenge_nonce = nonce
+        wallet_link.challenge_issued_at = issued_at
+        wallet_link.verified_at = None
+        db.session.commit()
+
+        return jsonify({"ok": True, "address": address, "message": message, "nonce": nonce})
+
+    @app.route("/wallet/verify", methods=["POST"])
+    @csrf.exempt
+    @login_required
+    def wallet_verify():
+        from models import WalletLink
+
+        payload = request.get_json(silent=True) or {}
+        raw_address = str(payload.get("address", "")).strip()
+        signature = str(payload.get("signature", "")).strip()
+        chain_id = payload.get("chain_id")
+
+        if not raw_address or not Web3.is_address(raw_address):
+            return jsonify({"ok": False, "error": "Invalid wallet address."}), 400
+        if not signature:
+            return jsonify({"ok": False, "error": "Signature is required."}), 400
+
+        address = Web3.to_checksum_address(raw_address)
+        wallet_link = WalletLink.query.filter_by(user_id=current_user.id).one_or_none()
+        if wallet_link is None:
+            return jsonify({"ok": False, "error": "No active challenge for this account."}), 400
+        if wallet_link.address != address:
+            return jsonify({"ok": False, "error": "Address does not match the active challenge."}), 400
+        if not wallet_link.challenge_nonce or not wallet_link.challenge_issued_at:
+            return jsonify({"ok": False, "error": "Challenge expired. Please reconnect wallet."}), 400
+        if datetime.utcnow() - wallet_link.challenge_issued_at > timedelta(minutes=10):
+            wallet_link.challenge_nonce = None
+            wallet_link.challenge_issued_at = None
+            db.session.commit()
+            return jsonify({"ok": False, "error": "Challenge expired. Please reconnect wallet."}), 400
+
+        challenge_message = (
+            "DailyHelper Wallet Verification\n\n"
+            f"User ID: {current_user.id}\n"
+            f"Address: {wallet_link.address}\n"
+            f"Nonce: {wallet_link.challenge_nonce}\n"
+            f"Issued At: {wallet_link.challenge_issued_at.isoformat()}Z\n"
+            f"Domain: {request.host}"
+        )
+
+        try:
+            recovered = Account.recover_message(
+                encode_defunct(text=challenge_message),
+                signature=signature,
+            )
+        except Exception as e:  # noqa: BLE001
+            return jsonify({"ok": False, "error": f"Invalid signature: {e}"}), 400
+
+        if Web3.to_checksum_address(recovered) != wallet_link.address:
+            return jsonify({"ok": False, "error": "Signature does not match the wallet address."}), 400
+
+        wallet_link.verified_at = datetime.utcnow()
+        wallet_link.challenge_nonce = None
+        wallet_link.challenge_issued_at = None
+        db.session.commit()
+
+        try:
+            append_statement(
+                kind="wallet_linked",
+                payload={
+                    "address": wallet_link.address,
+                    "chain_id": chain_id,
+                },
+                user_id=current_user.id,
+            )
+            maybe_seal_block()
+        except Exception:  # noqa: BLE001
+            pass
+
+        return jsonify(
+            {
+                "ok": True,
+                "address": wallet_link.address,
+                "verified_at": wallet_link.verified_at.isoformat() if wallet_link.verified_at else None,
+            }
+        )
+
+    @app.route("/wallet/disconnect", methods=["POST"])
+    @csrf.exempt
+    @login_required
+    def wallet_disconnect():
+        from models import WalletLink
+
+        wallet_link = WalletLink.query.filter_by(user_id=current_user.id).one_or_none()
+        if wallet_link is None:
+            return jsonify({"ok": True, "address": None})
+
+        removed_address = wallet_link.address
+        db.session.delete(wallet_link)
+        db.session.commit()
+
+        try:
+            append_statement(
+                kind="wallet_unlinked",
+                payload={"address": removed_address},
+                user_id=current_user.id,
+            )
+            maybe_seal_block()
+        except Exception:  # noqa: BLE001
+            pass
+
+        return jsonify({"ok": True, "address": None})
+
     @app.route("/blockchain/blocks")
     @login_required
     def blockchain_blocks():
@@ -374,7 +585,7 @@ def create_app() -> Flask:
     @app.route("/dashboard")
     @login_required
     def dashboard():
-        from models import HelpRequest, HelpOffer
+        from models import HelpRequest, HelpOffer, Statement
 
         # Stats for the current user
         total_requests = HelpRequest.query.filter_by(user_id=current_user.id).count()
@@ -417,6 +628,11 @@ def create_app() -> Flask:
             .limit(20)
             .all()
         )
+        latest_reputation_anchor = (
+            Statement.query.filter_by(user_id=current_user.id, kind="reputation_snapshot_anchored")
+            .order_by(Statement.created_at.desc())
+            .first()
+        )
 
         return render_template(
             "dashboard.html",
@@ -435,6 +651,7 @@ def create_app() -> Flask:
             },
             my_requests=my_requests,
             my_offers=my_offers,
+            latest_reputation_anchor=latest_reputation_anchor,
         )
 
     
@@ -464,9 +681,9 @@ def create_app() -> Flask:
             desc = form.description.data
             # Append skills and notes for now to description to avoid schema changes
             if form.skills_required.data:
-                desc += f"\n\nSkills required: {form.skills_required.data}"
+                desc += f"\n\n所需技能: {form.skills_required.data}"
             if form.notes.data:
-                desc += f"\n\nNotes: {form.notes.data}"
+                desc += f"\n\n补充说明: {form.notes.data}"
 
             hr = HelpRequest(
                 user_id=current_user.id,
@@ -675,8 +892,8 @@ def create_app() -> Flask:
         ngo = NGO.query.get_or_404(ngo_id)
         # Placeholder campaigns/needs
         campaigns = [
-            {"title": "Monthly Food Drive", "need": "Volunteers for distribution"},
-            {"title": "School Supplies", "need": "Donations of notebooks and pens"},
+            {"title": "每月食物捐赠", "need": "需要分发志愿者"},
+            {"title": "学习用品捐赠", "need": "需要笔记本和笔的捐赠"},
         ]
         return render_template("features/ngo_detail.html", ngo=ngo, campaigns=campaigns)
 
@@ -922,9 +1139,9 @@ def create_app() -> Flask:
         if offer_form.submit.data and offer_form.validate_on_submit():
             msg = offer_form.message.data
             if offer_form.availability.data:
-                msg += "\n\nAvailability: Can start."
+                msg += "\n\n可用性: 可以立即开始。"
             if offer_form.timeframe.data:
-                msg += f"\n\nTimeframe: {offer_form.timeframe.data}"
+                msg += f"\n\n预计时间: {offer_form.timeframe.data}"
             offer = HelpOffer(
                 request_id=req.id,
                 helper_id=current_user.id,
@@ -1019,6 +1236,23 @@ def create_app() -> Flask:
                 db.session.commit()
 
                 # Blockchain log: task completion
+                onchain_result = None
+                onchain_error = None
+                anchor_payload = json.dumps(
+                    {
+                        "source": "task_completed",
+                        "request_id": req.id,
+                        "requester_id": current_user.id,
+                        "helper_id": accepted_offer.helper_id,
+                        "completed_at": datetime.utcnow().isoformat() + "Z",
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                try:
+                    onchain_result = submit_anchor_transaction(anchor_payload)
+                except Exception as e:  # noqa: BLE001
+                    onchain_error = str(e)
                 try:
                     append_statement(
                         kind="task_completed",
@@ -1026,6 +1260,11 @@ def create_app() -> Flask:
                             "request_id": req.id,
                             "helper_id": accepted_offer.helper_id,
                             "requester_id": current_user.id,
+                            "onchain_tx_hash": onchain_result.get("tx_hash") if onchain_result else None,
+                            "onchain_chain_id": onchain_result.get("chain_id") if onchain_result else None,
+                            "onchain_tx_status": onchain_result.get("status") if onchain_result else None,
+                            "onchain_tx_url": onchain_result.get("tx_url") if onchain_result else None,
+                            "onchain_error": onchain_error,
                         },
                         user_id=current_user.id,
                     )
@@ -1033,7 +1272,12 @@ def create_app() -> Flask:
                 except Exception:  # noqa: BLE001
                     pass
 
-                flash("任务已标记为完成！您现在可以进行评价。", "success")
+                if onchain_result:
+                    flash(f"任务已标记完成，且已上链：{onchain_result.get('tx_hash')}", "success")
+                elif onchain_error:
+                    flash(f"任务已标记完成，但上链失败：{onchain_error}", "error")
+                else:
+                    flash("任务已标记为完成！您现在可以进行评价。", "success")
                 # Notify helper
                 _notify(
                     accepted_offer.helper_id,
@@ -1269,7 +1513,7 @@ def create_app() -> Flask:
         except Exception:  # noqa: BLE001
             pass
 
-        flash("User blacklisted.", "success")
+        flash("用户已拉黑。", "success")
         return redirect(url_for("admin_users"))
 
     @app.post("/admin/users/<int:user_id>/unblacklist")
@@ -1296,7 +1540,7 @@ def create_app() -> Flask:
         except Exception:  # noqa: BLE001
             pass
 
-        flash("User unblacklisted.", "success")
+        flash("用户已取消拉黑。", "success")
         return redirect(url_for("admin_users"))
 
     @app.post("/admin/users/<int:user_id>/delete")
@@ -1323,7 +1567,7 @@ def create_app() -> Flask:
         except Exception:  # noqa: BLE001
             pass
 
-        flash("User deleted.", "success")
+        flash("用户已删除。", "success")
         return redirect(url_for("admin_users"))
 
     # ------------------
@@ -1348,7 +1592,7 @@ def create_app() -> Flask:
             abort(400)
         fl.status = "approved" if action == "approve" else "rejected"
         db.session.commit()
-        flash("Flag updated.", "success")
+        flash("标记已更新。", "success")
         return redirect(url_for("admin_moderation"))
 
     @app.post("/admin/ngos/<int:ngo_id>/verify")
@@ -1375,13 +1619,13 @@ def create_app() -> Flask:
         except Exception:  # noqa: BLE001
             pass
 
-        flash("NGO verified.", "success")
+        flash("公益组织已认证。", "success")
         return redirect(url_for("admin_moderation"))
 
     # Profiles
     @app.route("/u/<string:username>")
     def profile_view(username: str):
-        from models import User, HelpRequest, HelpOffer, Review
+        from models import User, HelpRequest, HelpOffer, Review, Statement
         user = User.query.filter_by(username=username).first_or_404()
 
         # Stats
@@ -1398,19 +1642,24 @@ def create_app() -> Flask:
         # Reputation tier (simple mapping)
         score = float(getattr(user, "reputation_score", 0.0) or 0.0)
         if score >= 80:
-            tier = "Expert"
+            tier = "专家"
         elif score >= 50:
-            tier = "Trusted"
+            tier = "可信赖"
         elif score >= 20:
-            tier = "Helper"
+            tier = "帮助者"
         else:
-            tier = "Beginner"
+            tier = "新手"
 
         # Reviews received (paginated)
         page = int(request.args.get("page", 1) or 1)
         per_page = 5
         reviews_q = Review.query.filter_by(reviewee_id=user.id).order_by(Review.created_at.desc())
         reviews = reviews_q.paginate(page=page, per_page=per_page, error_out=False)
+        latest_reputation_anchor = (
+            Statement.query.filter_by(user_id=user.id, kind="reputation_snapshot_anchored")
+            .order_by(Statement.created_at.desc())
+            .first()
+        )
 
         return render_template(
             "profile/view.html",
@@ -1422,7 +1671,110 @@ def create_app() -> Flask:
             },
             tier=tier,
             reviews=reviews,
+            latest_reputation_anchor=latest_reputation_anchor,
+            can_anchor_reputation=(current_user.is_authenticated and current_user.id == user.id),
         )
+
+    def _build_reputation_snapshot(user) -> dict:
+        from models import HelpRequest, HelpOffer
+
+        requests_completed = HelpRequest.query.filter_by(user_id=user.id, status="completed").count()
+        helps_completed = HelpOffer.query.filter_by(helper_id=user.id, status="completed").count()
+        total_offers_attempted = HelpOffer.query.filter(
+            HelpOffer.helper_id == user.id,
+            HelpOffer.status.in_(["accepted", "completed", "rejected"]),
+        ).count()
+        success_rate = int((helps_completed / total_offers_attempted) * 100) if total_offers_attempted else 0
+        score = float(getattr(user, "reputation_score", 0.0) or 0.0)
+        tier = "新手"
+        if score >= 80:
+            tier = "专家"
+        elif score >= 50:
+            tier = "可信赖"
+        elif score >= 20:
+            tier = "帮助者"
+        snapshot = {
+            "source": "dailyhelper_reputation_snapshot",
+            "user_id": user.id,
+            "username": user.username,
+            "reputation_score": score,
+            "tier": tier,
+            "requests_completed": requests_completed,
+            "helps_completed": helps_completed,
+            "success_rate": success_rate,
+            "generated_at": datetime.utcnow().isoformat() + "Z",
+        }
+        snapshot_blob = json.dumps(snapshot, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        snapshot["snapshot_hash"] = hashlib.sha256(snapshot_blob).hexdigest()
+        return snapshot
+
+    @app.route("/blockchain/reputation/proof/<string:username>")
+    @login_required
+    def reputation_proof(username: str):
+        from models import User, Statement
+
+        user = User.query.filter_by(username=username).first_or_404()
+        snapshot = _build_reputation_snapshot(user)
+        latest_anchor = (
+            Statement.query.filter_by(user_id=user.id, kind="reputation_snapshot_anchored")
+            .order_by(Statement.created_at.desc())
+            .first()
+        )
+        return jsonify(
+            {
+                "ok": True,
+                "snapshot": snapshot,
+                "latest_anchor": latest_anchor.payload if latest_anchor else None,
+            }
+        )
+
+    @app.route("/blockchain/reputation/anchor", methods=["POST"])
+    @login_required
+    def anchor_my_reputation():
+        snapshot = _build_reputation_snapshot(current_user)
+        anchor_text = json.dumps(
+            {
+                "source": "dailyhelper_reputation_anchor",
+                "snapshot_hash": snapshot["snapshot_hash"],
+                "snapshot": snapshot,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        try:
+            tx = submit_anchor_transaction(anchor_text)
+            append_statement(
+                kind="reputation_snapshot_anchored",
+                payload={
+                    "snapshot_hash": snapshot["snapshot_hash"],
+                    "reputation_score": snapshot["reputation_score"],
+                    "tier": snapshot["tier"],
+                    "tx_hash": tx.get("tx_hash"),
+                    "chain_id": tx.get("chain_id"),
+                    "tx_status": tx.get("status"),
+                    "tx_url": tx.get("tx_url"),
+                    "anchored_at": datetime.utcnow().isoformat() + "Z",
+                },
+                user_id=current_user.id,
+            )
+            maybe_seal_block()
+            flash(f"信誉快照已上链：{tx.get('tx_hash')}", "success")
+        except Exception as e:  # noqa: BLE001
+            try:
+                append_statement(
+                    kind="reputation_snapshot_anchor_failed",
+                    payload={
+                        "snapshot_hash": snapshot["snapshot_hash"],
+                        "error": str(e)[:500],
+                        "failed_at": datetime.utcnow().isoformat() + "Z",
+                    },
+                    user_id=current_user.id,
+                )
+                maybe_seal_block()
+            except Exception:
+                pass
+            flash(f"信誉快照上链失败：{e}", "error")
+        return redirect(url_for("profile_view", username=current_user.username))
 
     @app.route("/settings/profile", methods=["GET", "POST"])
     @login_required
@@ -1466,7 +1818,7 @@ def create_app() -> Flask:
             except Exception:  # noqa: BLE001
                 pass
 
-            flash("Profile updated.", "success")
+            flash("个人资料已更新。", "success")
             return redirect(url_for("profile_view", username=user.username))
 
         if request.method == "POST" and form.errors:

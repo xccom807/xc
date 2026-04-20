@@ -5,7 +5,7 @@
       <h2>被标记内容</h2>
       {% if flags %}
         <table class="admin-table">
-          <thead><tr><th>ID</th><th>Type</th><th>Content ID</th><th>Reason</th><th>Status</th><th>Actions</th></tr></thead>
+          <thead><tr><th>ID</th><th>类型</th><th>内容ID</th><th>原因</th><th>状态</th><th>操作</th></tr></thead>
           <tbody>
             {% for f in flags %}
               <tr>
@@ -16,10 +16,10 @@
                 <td>{{ f.status }}</td>
                 <td class="action-cell">
                   <form method="post" action="{{ url_for('admin_flag_action', flag_id=f.id, action='approve') }}" style="display:inline;">
-                    <button class="btn small" type="submit">Approve</button>
+                    <button class="btn small" type="submit">通过</button>
                   </form>
                   <form method="post" action="{{ url_for('admin_flag_action', flag_id=f.id, action='reject') }}" style="display:inline;">
-                    <button class="btn danger small" type="submit">Reject</button>
+                    <button class="btn danger small" type="submit">驳回</button>
                   </form>
                 </td>
               </tr>
@@ -27,7 +27,7 @@
           </tbody>
         </table>
       {% else %}
-        <p class="muted">No flags pending.</p>
+        <p class="muted">暂无待处理的标记。</p>
       {% endif %}
     </section>
 
@@ -35,18 +35,18 @@
       <h2>公益组织提交审核</h2>
       {% if pending_ngos %}
         <table class="admin-table">
-          <thead><tr><th>Name</th><th>Category</th><th>Location</th><th>Submitted</th><th>Actions</th></tr></thead>
+          <thead><tr><th>名称</th><th>分类</th><th>所在地</th><th>提交时间</th><th>操作</th></tr></thead>
           <tbody>
             {% for n in pending_ngos %}
               <tr>
                 <td>{{ n.name }}</td>
-                <td>{{ n.category or 'General' }}</td>
+                <td>{{ n.category or '综合' }}</td>
                 <td>{{ n.location or '-' }}</td>
                 <td>{{ n.created_at.strftime('%Y-%m-%d') }}</td>
                 <td class="action-cell">
-                  <a class="btn small" href="{{ url_for('ngo_detail', ngo_id=n.id) }}">View</a>
+                  <a class="btn small" href="{{ url_for('ngo_detail', ngo_id=n.id) }}">查看</a>
                   <form method="post" action="{{ url_for('admin_verify_ngo', ngo_id=n.id) }}" style="display:inline;">
-                    <button class="btn small" type="submit">Verify</button>
+                    <button class="btn small" type="submit">认证</button>
                   </form>
                 </td>
               </tr>
@@ -54,7 +54,7 @@
           </tbody>
         </table>
       {% else %}
-        <p class="muted">No NGO submissions pending.</p>
+        <p class="muted">暂无待审核的公益组织提交。</p>
       {% endif %}
     </section>
   </div>
