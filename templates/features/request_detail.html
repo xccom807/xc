@@ -98,6 +98,40 @@
         {% endif %}
       {% endif %}
 
+      {# Web3 Payment Section #}
+      {% if payment_needed and req.price and not req.is_volunteer %}
+        <div class="section" style="margin-top:1rem;">
+          <h3><i class="fa-solid fa-wallet"></i> 支付帮助费用</h3>
+          <p>任务已完成，请通过 Web3 钱包向帮助者支付费用。</p>
+          <div style="background:var(--panel-color);border:1px solid var(--border-color);border-radius:var(--border-radius);padding:1.25rem;margin:.75rem 0;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+              <span class="muted">应付金额</span>
+              <strong style="font-size:1.2rem;">{{ '%.4f'|format(req.price) }} ETH</strong>
+            </div>
+            {% if helper_wallet_address %}
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem;">
+                <span class="muted">帮助者钱包</span>
+                <code style="font-size:.85rem;">{{ helper_wallet_address[:8] }}...{{ helper_wallet_address[-6:] }}</code>
+              </div>
+              {% if requester_wallet_linked %}
+                <button id="pay-helper-btn" class="btn" onclick="payHelperViaWallet()" style="width:100%;">
+                  <i class="fa-solid fa-paper-plane"></i> 通过 MetaMask 支付 {{ '%.4f'|format(req.price) }} ETH
+                </button>
+                <div id="payment-status" style="margin-top:.75rem;display:none;"></div>
+              {% else %}
+                <div class="flash info" style="margin-top:.5rem;">
+                  您尚未绑定钱包。<a href="{{ url_for('connect_wallet') }}">请先绑定钱包</a>后再进行支付。
+                </div>
+              {% endif %}
+            {% else %}
+              <div class="flash info" style="margin-top:.5rem;">
+                帮助者尚未绑定 Web3 钱包，无法进行链上支付。请联系帮助者绑定钱包后再付款。
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      {% endif %}
+
       <div class="section" style="margin-top:1rem;">
         <h3>评价</h3>
         {% if request_reviews %}
@@ -181,4 +215,89 @@
       {% endif %}
     </aside>
   </div>
+{% endblock %}
+
+{% block scripts %}
+{% if payment_needed and helper_wallet_address and requester_wallet_linked %}
+<script>
+async function payHelperViaWallet() {
+  const btn = document.getElementById('pay-helper-btn');
+  const statusDiv = document.getElementById('payment-status');
+
+  if (typeof window.ethereum === 'undefined') {
+    showPaymentStatus('error', '未检测到 MetaMask，请先安装 MetaMask 浏览器扩展。');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 处理中...';
+  statusDiv.style.display = 'block';
+  showPaymentStatus('info', '正在连接钱包...');
+
+  try {
+    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    if (!accounts || !accounts.length) {
+      showPaymentStatus('error', '未获取到钱包账户。');
+      resetPayBtn();
+      return;
+    }
+
+    const fromAddress = accounts[0];
+    const toAddress = '{{ helper_wallet_address }}';
+    const amountEth = {{ req.price }};
+    const amountWei = '0x' + BigInt(Math.round(amountEth * 1e18)).toString(16);
+
+    showPaymentStatus('info', '请在 MetaMask 中确认交易...');
+
+    const txHash = await window.ethereum.request({
+      method: 'eth_sendTransaction',
+      params: [{
+        from: fromAddress,
+        to: toAddress,
+        value: amountWei,
+      }],
+    });
+
+    showPaymentStatus('success',
+      '交易已发送！<br>交易哈希: <code style="word-break:break-all;">' + txHash + '</code>' +
+      '<br><a href="https://sepolia.etherscan.io/tx/' + txHash + '" target="_blank" style="color:var(--accent-color);">在 Etherscan 查看</a>'
+    );
+
+    // Record payment on backend
+    try {
+      await fetch('/api/record-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ request_id: {{ req.id }}, tx_hash: txHash })
+      });
+    } catch (e) {
+      // non-critical
+    }
+
+    btn.innerHTML = '<i class="fa-solid fa-check"></i> 已支付';
+    btn.style.background = '#10b981';
+  } catch (error) {
+    if (error.code === 4001) {
+      showPaymentStatus('error', '您取消了交易。');
+    } else {
+      showPaymentStatus('error', '交易失败: ' + (error.message || error));
+    }
+    resetPayBtn();
+  }
+}
+
+function resetPayBtn() {
+  const btn = document.getElementById('pay-helper-btn');
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> 通过 MetaMask 支付 {{ "%.4f"|format(req.price) }} ETH';
+}
+
+function showPaymentStatus(type, msg) {
+  const statusDiv = document.getElementById('payment-status');
+  statusDiv.style.display = 'block';
+  const colors = { success: '#10b981', error: '#ef4444', info: 'var(--accent-color)' };
+  statusDiv.innerHTML = '<div style="padding:.75rem;border-radius:var(--border-radius);border:1px solid ' + colors[type] + ';color:' + colors[type] + ';font-size:.9rem;">' + msg + '</div>';
+}
+</script>
+{% endif %}
 {% endblock %}

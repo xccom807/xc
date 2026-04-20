@@ -5,7 +5,7 @@
       <h2>编辑个人资料</h2>
       <p class="muted">更新你的公开信息。这有助于求助者和帮助者更好地了解你。</p>
     </div>
-    <form method="post" novalidate>
+    <form method="post" enctype="multipart/form-data" novalidate>
       {{ form.hidden_tag() }}
       <div class="grid grid-2">
         <div class="field">
@@ -23,8 +23,14 @@
           {{ form.location(class='input') }}
         </div>
         <div class="field">
-          <label>头像 URL</label>
-          {{ form.avatar_url(class='input') }}
+          <label>上传头像</label>
+          {% if current_user.avatar_url %}
+            <div style="margin-bottom:.5rem;">
+              <img src="{{ current_user.avatar_url }}" alt="当前头像" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid var(--border-color);">
+            </div>
+          {% endif %}
+          {{ form.avatar(class='input', accept='image/*') }}
+          <small class="muted">支持 jpg、png、gif、webp 格式</small>
         </div>
       </div>
       <div class="grid grid-2">

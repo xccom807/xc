@@ -514,6 +514,8 @@ def create_app() -> Flask:
         if form.validate_on_submit():
             user = User.query.filter_by(email=form.email.data.lower()).first()
             if user:
+                # Invalidate old unused tokens
+                PasswordResetToken.query.filter_by(user_id=user.id, used=False).update({"used": True})
                 token = secrets.token_urlsafe(32)
                 prt = PasswordResetToken(user_id=user.id, token=token)
                 db.session.add(prt)
@@ -1688,6 +1690,21 @@ def create_app() -> Flask:
                 )
                 can_review = already is None
 
+        # Payment info for completed paid tasks
+        helper_wallet_address = None
+        requester_wallet_linked = False
+        payment_needed = False
+        if req.status == "completed" and req.price and not req.is_volunteer:
+            completed_offer = HelpOffer.query.filter_by(request_id=req.id, status="completed").first()
+            if completed_offer:
+                from models import WalletLink
+                helper_wl = WalletLink.query.filter_by(user_id=completed_offer.helper_id).one_or_none()
+                if helper_wl and helper_wl.verified_at:
+                    helper_wallet_address = helper_wl.address
+                requester_wl = WalletLink.query.filter_by(user_id=req.user_id).one_or_none()
+                requester_wallet_linked = bool(requester_wl and requester_wl.verified_at)
+                payment_needed = is_requester
+
         return render_template(
             "features/request_detail.html",
             req=req,
@@ -1702,7 +1719,50 @@ def create_app() -> Flask:
             my_offer=my_offer,
             request_reviews=request_reviews,
             can_review=can_review,
+            helper_wallet_address=helper_wallet_address,
+            requester_wallet_linked=requester_wallet_linked,
+            payment_needed=payment_needed,
         )
+
+    @app.route("/api/record-payment", methods=["POST"])
+    @csrf.exempt
+    @login_required
+    def record_payment():
+        from models import HelpRequest, HelpOffer
+        payload = request.get_json(silent=True) or {}
+        request_id = payload.get("request_id")
+        tx_hash = payload.get("tx_hash", "").strip()
+        if not request_id or not tx_hash:
+            return jsonify({"ok": False, "error": "Missing request_id or tx_hash"}), 400
+
+        req_obj = HelpRequest.query.get(request_id)
+        if not req_obj or req_obj.user_id != current_user.id:
+            return jsonify({"ok": False, "error": "Unauthorized"}), 403
+        if req_obj.status != "completed":
+            return jsonify({"ok": False, "error": "Task not completed"}), 400
+
+        completed_offer = HelpOffer.query.filter_by(request_id=req_obj.id, status="completed").first()
+        if not completed_offer:
+            return jsonify({"ok": False, "error": "No completed offer found"}), 400
+
+        try:
+            append_statement(
+                kind="payment_sent",
+                payload={
+                    "request_id": req_obj.id,
+                    "helper_id": completed_offer.helper_id,
+                    "requester_id": current_user.id,
+                    "tx_hash": tx_hash,
+                    "amount": req_obj.price,
+                },
+                user_id=current_user.id,
+            )
+            maybe_seal_block()
+        except Exception:
+            pass
+
+        db.session.commit()
+        return jsonify({"ok": True, "tx_hash": tx_hash})
 
     @app.route("/my-offers")
     @login_required
@@ -2111,6 +2171,9 @@ def create_app() -> Flask:
     @app.route("/settings/profile", methods=["GET", "POST"])
     @login_required
     def profile_edit():
+        import os
+        import uuid
+        from werkzeug.utils import secure_filename
         from models import User
         from forms import ProfileForm
 
@@ -2122,7 +2185,27 @@ def create_app() -> Flask:
             user.location = form.location.data or None
             user.bio = form.bio.data or None
             user.skills = form.skills.data or None
-            user.avatar_url = form.avatar_url.data or None
+
+            # Handle avatar file upload
+            if form.avatar.data:
+                file = form.avatar.data
+                if hasattr(file, 'filename') and file.filename:
+                    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'png'
+                    filename = f"{uuid.uuid4().hex}.{ext}"
+                    upload_dir = os.path.join(app.static_folder, 'uploads', 'avatars')
+                    os.makedirs(upload_dir, exist_ok=True)
+                    filepath = os.path.join(upload_dir, filename)
+                    file.save(filepath)
+                    # Delete old avatar file if exists
+                    if user.avatar_url and user.avatar_url.startswith('/static/uploads/avatars/'):
+                        old_path = os.path.join(app.root_path, user.avatar_url.lstrip('/'))
+                        if os.path.exists(old_path):
+                            try:
+                                os.remove(old_path)
+                            except Exception:
+                                pass
+                    user.avatar_url = f"/static/uploads/avatars/{filename}"
+
             # Save lat/lng if provided
             try:
                 user.latitude = float(form.latitude.data) if form.latitude.data is not None else None
@@ -2140,7 +2223,7 @@ def create_app() -> Flask:
                     kind="profile_update",
                     payload={
                         "updated_fields": [
-                            field for field in ["full_name", "phone", "location", "bio", "skills", "avatar_url", "latitude", "longitude"]
+                            field for field in ["full_name", "phone", "location", "bio", "skills", "avatar", "latitude", "longitude"]
                             if getattr(form, field).data is not None
                         ],
                     },

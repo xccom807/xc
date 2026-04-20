@@ -1,4 +1,5 @@
 from flask_wtf import FlaskForm
+from flask_wtf.file import FileField, FileAllowed
 from wtforms import (
     StringField,
     PasswordField,
@@ -98,7 +99,7 @@ class ProfileForm(FlaskForm):
     location = StringField("所在地", validators=[Optional(), Length(max=120)])
     bio = TextAreaField("关于我", validators=[Optional(), Length(max=2000)])
     skills = StringField("技能", validators=[Optional(), Length(max=300)])
-    avatar_url = StringField("头像 URL", validators=[Optional(), Length(max=300)])
+    avatar = FileField("上传头像", validators=[Optional(), FileAllowed(['jpg', 'jpeg', 'png', 'gif', 'webp'], '仅支持图片文件')])
     latitude = DecimalField("纬度", places=6, rounding=None, validators=[Optional(), NumberRange(min=-90, max=90)])
     longitude = DecimalField("经度", places=6, rounding=None, validators=[Optional(), NumberRange(min=-180, max=180)])
     submit = SubmitField("保存更改")

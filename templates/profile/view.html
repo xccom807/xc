@@ -2,7 +2,11 @@
 {% block content %}
   <section class="profile card">
     <div class="profile-head">
-      <div class="avatar" {% if profile_user.avatar_url %}style="background-image: url({{ profile_user.avatar_url|tojson }});"{% endif %}></div>
+      {% if profile_user.avatar_url %}
+        <img src="{{ profile_user.avatar_url }}" alt="{{ profile_user.username }}" class="avatar" style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:2px solid var(--border-color);">
+      {% else %}
+        <div class="avatar" style="width:72px;height:72px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:1.5rem;">{{ (profile_user.full_name or profile_user.username)[0]|upper }}</div>
+      {% endif %}
       <div>
         <h2 style="margin:0;">{{ profile_user.full_name or profile_user.username }}</h2>
         <div class="muted">{{ profile_user.location or '未知' }}</div>
