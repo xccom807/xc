@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% block content %}
+  <section class="card" style="max-width:550px; margin:2rem auto;">
+    <div class="hero">
+      <h2><i class="fa-solid fa-flag"></i> 举报内容</h2>
+      <p class="muted">您正在举报：{{ content_label }}</p>
+    </div>
+    <form method="post" novalidate>
+      {{ form.hidden_tag() }}
+
+      <div class="field">
+        <label>举报原因</label>
+        {{ form.reason(class='input') }}
+        {% for e in form.reason.errors %}<div class="flash error">{{ e }}</div>{% endfor %}
+      </div>
+
+      <div class="field">
+        <label>详细说明（可选）</label>
+        {{ form.detail(class='input', rows='4', placeholder='请描述具体情况，帮助管理员更好地了解问题…') }}
+        {% for e in form.detail.errors %}<div class="flash error">{{ e }}</div>{% endfor %}
+      </div>
+
+      <div class="actions" style="display:flex; gap:.75rem;">
+        {{ form.submit(class='btn', value='提交举报') }}
+        <a class="btn secondary" href="javascript:history.back()">取消</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}

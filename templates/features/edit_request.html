@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+{% block content %}
+  <section class="card">
+    <div class="hero">
+      <h2>编辑求助</h2>
+      <p class="muted">修改求助「{{ req.title }}」的信息。只有状态为"开放"的求助可以编辑。</p>
+    </div>
+    <form method="post" novalidate>
+      {{ form.hidden_tag() }}
+
+      <div class="field">
+        <label>标题</label>
+        {{ form.title(class='input', placeholder='例如：需要帮忙安装打印机') }}
+        {% for e in form.title.errors %}<div class="flash error">{{ e }}</div>{% endfor %}
+      </div>
+
+      <div class="field">
+        <label>描述</label>
+        {{ form.description(class='input', rows='4', placeholder='请描述任务内容、背景和你的期望…') }}
+        {% for e in form.description.errors %}<div class="flash error">{{ e }}</div>{% endfor %}
+      </div>
+
+      <div class="grid grid-2">
+        <div class="field">
+          <label>分类</label>
+          {{ form.category(class='input') }}
+          {% for e in form.category.errors %}<div class="flash error">{{ e }}</div>{% endfor %}
+        </div>
+        <div class="field">
+          <label>地点</label>
+          {{ form.location(class='input', placeholder='城市/区域') }}
+        </div>
+      </div>
+
+      <div class="grid grid-2">
+        <div class="field">
+          <label>需要的日期与时间</label>
+          {{ form.datetime_needed(class='input') }}
+        </div>
+        <div class="field">
+          <label>预计时长</label>
+          {{ form.duration_estimate(class='input', placeholder='例如：2小时') }}
+        </div>
+      </div>
+
+      <div class="grid grid-2">
+        <div class="field">
+          <label>报价</label>
+          {{ form.price_offered(class='input', placeholder='例如：500') }}
+        </div>
+        <div class="field" style="display:flex; align-items:center; gap:.6rem;">
+          {{ form.is_volunteer() }} <label style="margin:0">这是志愿/免费求助</label>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>所需技能</label>
+        {{ form.skills_required(class='input', placeholder='例如：水管维修、基础电工') }}
+      </div>
+
+      <div class="field">
+        <label>补充说明</label>
+        {{ form.notes(class='input', rows='3', placeholder='还有哪些信息需要帮助者了解…') }}
+      </div>
+
+      <div class="actions" style="display:flex; gap:.75rem;">
+        {{ form.submit(class='btn', value='保存修改') }}
+        <a class="btn secondary" href="{{ url_for('request_detail', request_id=req.id) }}">取消</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}

@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% set title = '记录 #' ~ stmt.id ~ ' | 区块链详情' %}
+{% block content %}
+<div style="max-width:800px;margin:0 auto;padding:2rem 0;">
+  <div style="margin-bottom:1.5rem;">
+    {% if stmt.block %}
+      <a href="{{ url_for('blockchain_block_detail', block_id=stmt.block.id) }}" class="btn btn-small secondary"><i class="fa-solid fa-arrow-left"></i> 返回区块 #{{ stmt.block.index }}</a>
+    {% else %}
+      <a href="{{ url_for('blockchain_blocks') }}" class="btn btn-small secondary"><i class="fa-solid fa-arrow-left"></i> 返回区块列表</a>
+    {% endif %}
+  </div>
+
+  <div class="card" style="padding:2rem;">
+    <h2 style="color:var(--accent-color);margin-bottom:1.5rem;"><i class="fa-solid fa-file-lines"></i> 记录 #{{ stmt.id }}</h2>
+
+    <div class="grid grid-2" style="gap:1.5rem;margin-bottom:2rem;">
+      <div style="background:rgba(59,130,246,0.05);padding:1rem;border-radius:var(--border-radius);border-left:3px solid var(--accent-color);">
+        <div style="font-weight:600;margin-bottom:.5rem;">类型</div>
+        <div style="color:var(--accent-color);font-weight:600;">{{ stmt.kind }}</div>
+      </div>
+      <div style="background:rgba(59,130,246,0.05);padding:1rem;border-radius:var(--border-radius);border-left:3px solid var(--accent-color);">
+        <div style="font-weight:600;margin-bottom:.5rem;">创建时间</div>
+        <div style="color:var(--text-muted);">{{ stmt.created_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}</div>
+      </div>
+      <div style="background:rgba(59,130,246,0.05);padding:1rem;border-radius:var(--border-radius);border-left:3px solid var(--accent-color);">
+        <div style="font-weight:600;margin-bottom:.5rem;">关联用户</div>
+        <div>
+          {% if stmt.user %}
+            <a href="{{ url_for('profile_view', username=stmt.user.username) }}">{{ stmt.user.username }}</a>
+          {% else %}
+            <span class="muted">无</span>
+          {% endif %}
+        </div>
+      </div>
+      <div style="background:rgba(59,130,246,0.05);padding:1rem;border-radius:var(--border-radius);border-left:3px solid var(--accent-color);">
+        <div style="font-weight:600;margin-bottom:.5rem;">所属区块</div>
+        <div>
+          {% if stmt.block %}
+            <a href="{{ url_for('blockchain_block_detail', block_id=stmt.block.id) }}">区块 #{{ stmt.block.index }}</a>
+          {% else %}
+            <span class="muted">尚未打包</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin-bottom:1rem;">载荷数据</h3>
+    <pre style="background:rgba(0,0,0,0.03);padding:1.5rem;border-radius:var(--border-radius);font-family:monospace;font-size:.85rem;overflow-x:auto;white-space:pre-wrap;word-break:break-all;border:1px solid var(--border-color);">{{ stmt.payload | tojson(indent=2) }}</pre>
+  </div>
+</div>
+{% endblock %}

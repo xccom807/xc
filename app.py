@@ -577,10 +577,11 @@ def create_app() -> Flask:
     @app.context_processor
     def inject_unread_count():
         if current_user.is_authenticated:
-            from models import Notification
-            count = Notification.query.filter_by(user_id=current_user.id, is_read=False).count()
-            return {"unread_notifications": count}
-        return {"unread_notifications": 0}
+            from models import Notification, Message
+            notif_count = Notification.query.filter_by(user_id=current_user.id, is_read=False).count()
+            msg_count = Message.query.filter_by(receiver_id=current_user.id, is_read=False).count()
+            return {"unread_notifications": notif_count, "unread_messages": msg_count}
+        return {"unread_notifications": 0, "unread_messages": 0}
 
     @app.route("/dashboard")
     @login_required
@@ -665,6 +666,250 @@ def create_app() -> Flask:
             return redirect(url_for("blockchain_blocks"))
         return redirect(url_for("dashboard"))
 
+    # ------------------
+    # Cancel request
+    # ------------------
+    @app.route("/requests/<int:request_id>/cancel", methods=["POST"])
+    @login_required
+    def cancel_request(request_id: int):
+        from models import HelpRequest, HelpOffer
+        from forms import CancelRequestForm
+
+        form = CancelRequestForm()
+        req = HelpRequest.query.get_or_404(request_id)
+
+        # Only the requester can cancel
+        if req.user_id != current_user.id:
+            flash("您无权取消该求助。", "error")
+            return redirect(url_for("request_detail", request_id=req.id))
+
+        # Can only cancel open or in_progress requests
+        if req.status not in ("open", "in_progress"):
+            flash("该求助当前状态无法取消。", "error")
+            return redirect(url_for("request_detail", request_id=req.id))
+
+        if form.validate_on_submit():
+            old_status = req.status
+            req.status = "cancelled"
+            # Reject all pending offers
+            HelpOffer.query.filter_by(request_id=req.id, status="pending").update({"status": "rejected"})
+            # If in_progress, also reject accepted offers
+            if old_status == "in_progress":
+                accepted_offers = HelpOffer.query.filter_by(request_id=req.id, status="accepted").all()
+                for offer in accepted_offers:
+                    offer.status = "rejected"
+                    _notify(
+                        offer.helper_id,
+                        "request_cancelled",
+                        f"求助「{req.title[:40]}」已被求助者取消。",
+                        url_for("request_detail", request_id=req.id),
+                    )
+            db.session.commit()
+
+            # Blockchain log
+            try:
+                append_statement(
+                    kind="request_cancelled",
+                    payload={
+                        "request_id": req.id,
+                        "previous_status": old_status,
+                    },
+                    user_id=current_user.id,
+                )
+                maybe_seal_block()
+            except Exception:
+                pass
+
+            flash("求助已取消。", "success")
+        return redirect(url_for("request_help"))
+
+    # ------------------
+    # Edit request
+    # ------------------
+    @app.route("/requests/<int:request_id>/edit", methods=["GET", "POST"])
+    @login_required
+    def edit_request(request_id: int):
+        from models import HelpRequest
+        from forms import EditRequestForm
+
+        req = HelpRequest.query.get_or_404(request_id)
+
+        # Only the requester can edit
+        if req.user_id != current_user.id:
+            flash("您无权编辑该求助。", "error")
+            return redirect(url_for("request_detail", request_id=req.id))
+
+        # Can only edit open requests
+        if req.status != "open":
+            flash("只有状态为「开放」的求助可以编辑。", "error")
+            return redirect(url_for("request_detail", request_id=req.id))
+
+        form = EditRequestForm(obj=req)
+
+        if form.validate_on_submit():
+            desc = form.description.data
+            if form.skills_required.data:
+                desc += f"\n\n所需技能: {form.skills_required.data}"
+            if form.notes.data:
+                desc += f"\n\n补充说明: {form.notes.data}"
+
+            req.title = form.title.data
+            req.description = desc
+            req.category = form.category.data
+            req.location = form.location.data or None
+            req.time_needed = (
+                form.datetime_needed.data.strftime("%Y-%m-%d %H:%M")
+                if form.datetime_needed.data
+                else form.duration_estimate.data or None
+            )
+            req.price = (
+                float(form.price_offered.data)
+                if (form.price_offered.data and not form.is_volunteer.data)
+                else None
+            )
+            req.is_volunteer = bool(form.is_volunteer.data)
+            db.session.commit()
+
+            # Blockchain log
+            try:
+                append_statement(
+                    kind="request_edited",
+                    payload={
+                        "request_id": req.id,
+                        "title": req.title,
+                        "category": req.category,
+                    },
+                    user_id=current_user.id,
+                )
+                maybe_seal_block()
+            except Exception:
+                pass
+
+            flash("求助已更新。", "success")
+            return redirect(url_for("request_detail", request_id=req.id))
+
+        # If POST with errors, flash them
+        if request.method == "POST" and form.errors:
+            for field, errs in form.errors.items():
+                for e in errs:
+                    flash(f"{field}: {e}", "error")
+
+        return render_template("features/edit_request.html", form=form, req=req)
+
+    # ------------------
+    # Change password
+    # ------------------
+    @app.route("/settings/password", methods=["GET", "POST"])
+    @login_required
+    def change_password():
+        from forms import ChangePasswordForm
+
+        form = ChangePasswordForm()
+        if form.validate_on_submit():
+            if not current_user.check_password(form.current_password.data):
+                flash("当前密码不正确。", "error")
+                return render_template("auth/change_password.html", form=form)
+
+            current_user.set_password(form.new_password.data)
+            db.session.commit()
+
+            # Blockchain log
+            try:
+                append_statement(
+                    kind="password_changed",
+                    payload={},
+                    user_id=current_user.id,
+                )
+                maybe_seal_block()
+            except Exception:
+                pass
+
+            flash("密码修改成功。", "success")
+            return redirect(url_for("profile_view", username=current_user.username))
+
+        if request.method == "POST" and form.errors:
+            for field, errs in form.errors.items():
+                for e in errs:
+                    flash(f"{field}: {e}", "error")
+
+        return render_template("auth/change_password.html", form=form)
+
+    # ------------------
+    # Flag / Report
+    # ------------------
+    @app.route("/flag/<string:content_type>/<int:content_id>", methods=["GET", "POST"])
+    @login_required
+    def flag_content(content_type: str, content_id: int):
+        from models import Flag, HelpRequest, User
+        from forms import FlagForm
+
+        # Validate content_type
+        if content_type not in ("request", "user", "review"):
+            abort(400)
+
+        # Verify the content exists
+        if content_type == "request":
+            obj = HelpRequest.query.get_or_404(content_id)
+            content_label = f"求助「{obj.title[:40]}」"
+        elif content_type == "user":
+            obj = User.query.get_or_404(content_id)
+            content_label = f"用户「{obj.username}」"
+        else:
+            from models import Review
+            obj = Review.query.get_or_404(content_id)
+            content_label = f"评价 #{obj.id}"
+
+        # Check if already flagged by this user
+        existing = Flag.query.filter_by(
+            content_type=content_type,
+            content_id=content_id,
+        ).filter(Flag.status == "pending").first()
+
+        form = FlagForm()
+        if form.validate_on_submit():
+            if existing:
+                flash("该内容已被举报，正在等待审核。", "info")
+                return redirect(request.referrer or url_for("index"))
+
+            reason_text = form.reason.data
+            if form.detail.data:
+                reason_text += f" — {form.detail.data}"
+
+            flag = Flag(
+                content_type=content_type,
+                content_id=content_id,
+                reason=reason_text,
+                status="pending",
+            )
+            db.session.add(flag)
+            db.session.commit()
+
+            # Blockchain log
+            try:
+                append_statement(
+                    kind="content_flagged",
+                    payload={
+                        "content_type": content_type,
+                        "content_id": content_id,
+                        "reason": form.reason.data,
+                    },
+                    user_id=current_user.id,
+                )
+                maybe_seal_block()
+            except Exception:
+                pass
+
+            flash("举报已提交，管理员将进行审核。", "success")
+            return redirect(request.referrer or url_for("index"))
+
+        return render_template(
+            "flag.html",
+            form=form,
+            content_type=content_type,
+            content_id=content_id,
+            content_label=content_label,
+        )
+
     # Feature pages (placeholders)
     @app.route("/request-help", methods=["GET", "POST"])
     @login_required
@@ -735,7 +980,41 @@ def create_app() -> Flask:
     @app.route("/offer-help")
     @login_required
     def offer_help():
-        return render_template("features/offer_help.html")
+        from models import HelpRequest, HelpOffer
+        from sqlalchemy import func
+
+        # 获取当前用户已提交 offer 的 request_id 集合
+        my_offer_ids = set(
+            r[0] for r in db.session.query(HelpOffer.request_id).filter_by(helper_id=current_user.id).all()
+        )
+
+        # 可帮助的请求：开放状态、非自己发布的
+        q = HelpRequest.query.filter(
+            HelpRequest.status == "open",
+            HelpRequest.user_id != current_user.id,
+        ).order_by(HelpRequest.created_at.desc())
+
+        page = int(request.args.get("page", 1) or 1)
+        per_page = 12
+        pagination = q.paginate(page=page, per_page=per_page, error_out=False)
+        items = pagination.items
+
+        # 我的帮助记录
+        my_active_offers = (
+            HelpOffer.query.filter_by(helper_id=current_user.id)
+            .filter(HelpOffer.status.in_(["pending", "accepted"]))
+            .order_by(HelpOffer.created_at.desc())
+            .limit(10)
+            .all()
+        )
+
+        return render_template(
+            "features/offer_help.html",
+            items=items,
+            pagination=pagination,
+            my_offer_ids=my_offer_ids,
+            my_active_offers=my_active_offers,
+        )
 
     @app.route("/volunteer")
     def volunteer():
@@ -810,13 +1089,13 @@ def create_app() -> Flask:
         est_hours = completed_volunteer * 2  # simple placeholder estimate
 
         volunteer_categories = [
-            "Elderly Care",
-            "Community Cleanup",
-            "Teaching",
-            "Food Distribution",
-            "Animal Welfare",
-            "Healthcare Support",
-            "Other",
+            "老年关怀",
+            "社区清洁",
+            "教学辅导",
+            "食物分发",
+            "动物福利",
+            "医疗支持",
+            "其他",
         ]
 
         return render_template(
@@ -864,14 +1143,14 @@ def create_app() -> Flask:
         items = pagination.items
 
         categories = [
-            "Education",
-            "Healthcare",
-            "Environment",
-            "Poverty Alleviation",
-            "Animal Welfare",
-            "Women & Children",
-            "Disaster Relief",
-            "Other",
+            "教育",
+            "医疗健康",
+            "环境保护",
+            "扶贫",
+            "动物福利",
+            "妇女儿童",
+            "灾害救援",
+            "其他",
         ]
 
         return render_template(
@@ -1093,7 +1372,7 @@ def create_app() -> Flask:
         pagination = q.paginate(page=page, per_page=per_page, error_out=False)
         items = pagination.items
 
-        categories = ["Cooking", "Cleaning", "Moving", "Tutoring", "Errands", "Technical", "Other"]
+        categories = ["烹饪", "清洁", "搬运", "辅导", "跑腿", "技术支持", "其他"]
 
         return render_template(
             "features/marketplace.html",
@@ -1116,7 +1395,7 @@ def create_app() -> Flask:
     @login_required
     def request_detail(request_id: int):
         from models import HelpRequest, User, HelpOffer, Review
-        from forms import OfferHelpForm, ReviewForm, AcceptOfferForm, CompleteTaskForm
+        from forms import OfferHelpForm, ReviewForm, AcceptOfferForm, CompleteTaskForm, CancelRequestForm
 
         req = HelpRequest.query.get_or_404(request_id)
         requester = User.query.get(req.user_id)
@@ -1125,6 +1404,7 @@ def create_app() -> Flask:
         review_form = ReviewForm()
         accept_form = AcceptOfferForm()
         complete_form = CompleteTaskForm()
+        cancel_form = CancelRequestForm()
 
         # Get all offers for this request
         all_offers = HelpOffer.query.filter_by(request_id=request_id).order_by(HelpOffer.created_at.desc()).all()
@@ -1416,6 +1696,7 @@ def create_app() -> Flask:
             review_form=review_form,
             accept_form=accept_form,
             complete_form=complete_form,
+            cancel_form=cancel_form,
             all_offers=all_offers,
             is_requester=is_requester,
             my_offer=my_offer,
@@ -1586,13 +1867,64 @@ def create_app() -> Flask:
     @login_required
     @admin_required
     def admin_flag_action(flag_id: int, action: str):
-        from models import Flag
+        from models import Flag, HelpRequest, User, Review
         fl = Flag.query.get_or_404(flag_id)
         if action not in ("approve", "reject"):
             abort(400)
+
+        if fl.status != "pending":
+            flash("该举报已被处理。", "info")
+            return redirect(url_for("admin_moderation"))
+
         fl.status = "approved" if action == "approve" else "rejected"
+
+        # 如果通过举报，对被举报内容执行处理动作
+        if action == "approve":
+            if fl.content_type == "request":
+                req = HelpRequest.query.get(fl.content_id)
+                if req and req.status in ("open", "in_progress"):
+                    req.status = "cancelled"
+                    flash(f"举报已通过，求助 #{fl.content_id} 已被关闭。", "success")
+                else:
+                    flash("举报已通过。（被举报的求助已不在活跃状态）", "success")
+            elif fl.content_type == "user":
+                user = User.query.get(fl.content_id)
+                if user and not user.is_blacklisted:
+                    user.is_blacklisted = True
+                    user.blacklist_reason = f"因举报被拉黑：{fl.reason or '违规行为'}"
+                    flash(f"举报已通过，用户 {user.username} 已被拉黑。", "success")
+                else:
+                    flash("举报已通过。（用户已被拉黑或不存在）", "success")
+            elif fl.content_type == "review":
+                review = Review.query.get(fl.content_id)
+                if review:
+                    db.session.delete(review)
+                    flash(f"举报已通过，评价 #{fl.content_id} 已被删除。", "success")
+                else:
+                    flash("举报已通过。（评价已不存在）", "success")
+            else:
+                flash("举报已通过。", "success")
+
+            # Blockchain log
+            try:
+                append_statement(
+                    kind="flag_approved",
+                    payload={
+                        "flag_id": fl.id,
+                        "content_type": fl.content_type,
+                        "content_id": fl.content_id,
+                        "reason": fl.reason,
+                        "admin_id": current_user.id,
+                    },
+                    user_id=current_user.id,
+                )
+                maybe_seal_block()
+            except Exception:
+                pass
+        else:
+            flash("举报已驳回。", "success")
+
         db.session.commit()
-        flash("标记已更新。", "success")
         return redirect(url_for("admin_moderation"))
 
     @app.post("/admin/ngos/<int:ngo_id>/verify")
@@ -1827,6 +2159,204 @@ def create_app() -> Flask:
                     flash(f"{field}: {e}", "error")
 
         return render_template("profile/edit.html", form=form)
+
+    # ── #1 消息系统 ──────────────────────────────────────────
+    @app.route("/messages")
+    @login_required
+    def messages_inbox():
+        from models import Message, User
+        from sqlalchemy import or_, and_, func
+
+        # 获取所有对话伙伴（最近消息排序）
+        subq = (
+            db.session.query(
+                func.max(Message.id).label("last_id"),
+                db.case(
+                    (Message.sender_id == current_user.id, Message.receiver_id),
+                    else_=Message.sender_id,
+                ).label("partner_id"),
+            )
+            .filter(or_(Message.sender_id == current_user.id, Message.receiver_id == current_user.id))
+            .group_by("partner_id")
+            .subquery()
+        )
+        conversations = (
+            db.session.query(Message, User)
+            .join(subq, Message.id == subq.c.last_id)
+            .join(User, User.id == subq.c.partner_id)
+            .order_by(Message.created_at.desc())
+            .all()
+        )
+        # 未读消息计数
+        unread_counts = {}
+        for msg, partner in conversations:
+            cnt = Message.query.filter_by(sender_id=partner.id, receiver_id=current_user.id, is_read=False).count()
+            unread_counts[partner.id] = cnt
+
+        return render_template("messages/inbox.html", conversations=conversations, unread_counts=unread_counts)
+
+    @app.route("/messages/<int:user_id>", methods=["GET", "POST"])
+    @login_required
+    def messages_chat(user_id: int):
+        from models import Message, User
+        from forms import MessageForm
+        from sqlalchemy import or_, and_
+
+        partner = User.query.get_or_404(user_id)
+        if partner.id == current_user.id:
+            flash("不能给自己发消息。", "error")
+            return redirect(url_for("messages_inbox"))
+
+        form = MessageForm()
+        if form.validate_on_submit():
+            msg = Message(
+                sender_id=current_user.id,
+                receiver_id=partner.id,
+                content=form.content.data.strip(),
+            )
+            db.session.add(msg)
+            db.session.commit()
+            # 通知对方
+            _notify(
+                partner.id,
+                "new_message",
+                f"{current_user.username} 给你发了一条私信",
+                url_for("messages_chat", user_id=current_user.id),
+            )
+            db.session.commit()
+            return redirect(url_for("messages_chat", user_id=partner.id))
+
+        # 标记该对话中对方发来的消息为已读
+        Message.query.filter_by(sender_id=partner.id, receiver_id=current_user.id, is_read=False).update({"is_read": True})
+        db.session.commit()
+
+        # 获取对话消息
+        chat_messages = (
+            Message.query.filter(
+                or_(
+                    and_(Message.sender_id == current_user.id, Message.receiver_id == partner.id),
+                    and_(Message.sender_id == partner.id, Message.receiver_id == current_user.id),
+                )
+            )
+            .order_by(Message.created_at.asc())
+            .limit(200)
+            .all()
+        )
+        return render_template("messages/chat.html", partner=partner, chat_messages=chat_messages, form=form)
+
+    # ── #2 搜索功能 ──────────────────────────────────────────
+    @app.route("/search")
+    def search_page():
+        from models import HelpRequest, User
+        from sqlalchemy import or_
+
+        q = request.args.get("q", "").strip()
+        search_type = request.args.get("type", "all")  # all / requests / users
+        page = int(request.args.get("page", 1) or 1)
+        per_page = 12
+
+        results_requests = []
+        results_users = []
+        pagination_requests = None
+        pagination_users = None
+
+        if q:
+            if search_type in ("all", "requests"):
+                rq = HelpRequest.query.filter(
+                    or_(
+                        HelpRequest.title.ilike(f"%{q}%"),
+                        HelpRequest.description.ilike(f"%{q}%"),
+                        HelpRequest.category.ilike(f"%{q}%"),
+                        HelpRequest.location.ilike(f"%{q}%"),
+                    )
+                ).order_by(HelpRequest.created_at.desc())
+                pagination_requests = rq.paginate(page=page, per_page=per_page, error_out=False)
+                results_requests = pagination_requests.items
+
+            if search_type in ("all", "users"):
+                uq = User.query.filter(
+                    or_(
+                        User.username.ilike(f"%{q}%"),
+                        User.full_name.ilike(f"%{q}%"),
+                        User.location.ilike(f"%{q}%"),
+                        User.skills.ilike(f"%{q}%"),
+                    )
+                ).order_by(User.created_at.desc())
+                pagination_users = uq.paginate(page=page, per_page=per_page, error_out=False)
+                results_users = pagination_users.items
+
+        return render_template(
+            "search.html",
+            q=q,
+            search_type=search_type,
+            results_requests=results_requests,
+            results_users=results_users,
+            pagination_requests=pagination_requests,
+            pagination_users=pagination_users,
+        )
+
+    # ── #8 排行榜 ──────────────────────────────────────────
+    @app.route("/leaderboard")
+    def leaderboard():
+        from models import User, HelpRequest, HelpOffer
+        from sqlalchemy import func
+
+        # 信誉排行
+        top_reputation = User.query.filter(User.user_type != "admin").order_by(User.reputation_score.desc()).limit(20).all()
+
+        # 帮助次数排行
+        top_helpers = (
+            db.session.query(User, func.count(HelpOffer.id).label("help_count"))
+            .join(HelpOffer, HelpOffer.helper_id == User.id)
+            .filter(HelpOffer.status == "completed")
+            .group_by(User.id)
+            .order_by(func.count(HelpOffer.id).desc())
+            .limit(20)
+            .all()
+        )
+
+        # 求助完成排行
+        top_requesters = (
+            db.session.query(User, func.count(HelpRequest.id).label("req_count"))
+            .join(HelpRequest, HelpRequest.user_id == User.id)
+            .filter(HelpRequest.status == "completed")
+            .group_by(User.id)
+            .order_by(func.count(HelpRequest.id).desc())
+            .limit(20)
+            .all()
+        )
+
+        return render_template(
+            "leaderboard.html",
+            top_reputation=top_reputation,
+            top_helpers=top_helpers,
+            top_requesters=top_requesters,
+        )
+
+    # ── #12 区块链详情 ──────────────────────────────────────
+    @app.route("/blockchain/blocks/<int:block_id>")
+    @login_required
+    def blockchain_block_detail(block_id: int):
+        from models import Block, Statement
+        block = Block.query.get_or_404(block_id)
+        statements = Statement.query.filter_by(block_id=block.id).order_by(Statement.created_at.asc()).all()
+        # 前后区块
+        prev_block = Block.query.filter(Block.index < block.index).order_by(Block.index.desc()).first()
+        next_block = Block.query.filter(Block.index > block.index).order_by(Block.index.asc()).first()
+        return render_template(
+            "blockchain/block_detail.html",
+            block=block,
+            statements=statements,
+            prev_block=prev_block,
+            next_block=next_block,
+        )
+
+    @app.route("/blockchain/statements/<int:statement_id>")
+    @login_required
+    def blockchain_statement_detail(statement_id: int):
+        from models import Statement
+        stmt = Statement.query.get_or_404(statement_id)
+        return render_template("blockchain/statement_detail.html", stmt=stmt)
 
     # Error handlers
     @app.errorhandler(404)

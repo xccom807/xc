@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="card" style="max-width:800px;margin:0 auto;">
+  <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem;">
+    <a href="{{ url_for('messages_inbox') }}" class="btn btn-small secondary"><i class="fa-solid fa-arrow-left"></i></a>
+    <div class="avatar" style="width:36px;height:36px;border-radius:50%;background:var(--accent-color);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;">
+      {{ (partner.full_name or partner.username)[0]|upper }}
+    </div>
+    <div>
+      <strong><a href="{{ url_for('profile_view', username=partner.username) }}">{{ partner.full_name or partner.username }}</a></strong>
+      <div class="muted" style="font-size:.8rem;">@{{ partner.username }}</div>
+    </div>
+  </div>
+
+  <div class="chat-messages" id="chatMessages" style="max-height:500px;overflow-y:auto;border:1px solid var(--border-color);border-radius:var(--border-radius);padding:1rem;margin-bottom:1rem;display:flex;flex-direction:column;gap:.75rem;">
+    {% if not chat_messages %}
+      <p class="muted" style="text-align:center;">开始你们的对话吧！</p>
+    {% endif %}
+    {% for m in chat_messages %}
+      <div class="chat-bubble {% if m.sender_id == current_user.id %}mine{% else %}theirs{% endif %}">
+        <div class="bubble-content">{{ m.content }}</div>
+        <div class="bubble-time">{{ m.created_at.strftime('%m-%d %H:%M') }}</div>
+      </div>
+    {% endfor %}
+  </div>
+
+  <form method="post" novalidate style="display:flex;gap:.5rem;">
+    {{ form.hidden_tag() }}
+    {{ form.content(class='input', rows='2', placeholder='输入消息...', style='flex:1;resize:none;') }}
+    <button type="submit" class="btn" style="align-self:flex-end;"><i class="fa-solid fa-paper-plane"></i> 发送</button>
+  </form>
+</div>
+
+<style>
+.chat-bubble { max-width:75%; padding:.75rem 1rem; border-radius:12px; font-size:.95rem; }
+.chat-bubble.mine { align-self:flex-end; background:var(--accent-color); color:#fff; border-bottom-right-radius:4px; }
+.chat-bubble.theirs { align-self:flex-start; background:var(--panel-color); border:1px solid var(--border-color); border-bottom-left-radius:4px; }
+.bubble-time { font-size:.75rem; opacity:.7; margin-top:.25rem; }
+.chat-bubble.mine .bubble-time { text-align:right; }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var el = document.getElementById('chatMessages');
+  if (el) el.scrollTop = el.scrollHeight;
+});
+</script>
+{% endblock %}

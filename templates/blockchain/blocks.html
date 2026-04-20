@@ -233,7 +233,7 @@
       {% for block, statement_count in blocks_with_counts %}
         <div class="block-card">
           <div class="block-header">
-            <span class="block-index">Block #{{ block.index }}</span>
+            <a href="{{ url_for('blockchain_block_detail', block_id=block.id) }}" class="block-index" style="text-decoration:none;color:var(--accent-color);">区块 #{{ block.index }}</a>
             <span class="statements-count">{{ statement_count }} 条记录</span>
           </div>
 
@@ -267,7 +267,7 @@
               {% set statements = block.statements %}
               {% for statement in statements %}
                 <div class="statement-item">
-                  <div class="statement-kind">{{ statement.kind | title }}</div>
+                  <div class="statement-kind"><a href="{{ url_for('blockchain_statement_detail', statement_id=statement.id) }}" style="color:var(--accent-color);text-decoration:none;">{{ statement.kind | title }}</a></div>
                   {% if statement.user %}
                     <div class="statement-user">用户: {{ statement.user.username }}</div>
                   {% endif %}

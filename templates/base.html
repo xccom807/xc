@@ -29,9 +29,17 @@
 
         <nav class="nav-links" id="nav">
           <a href="{{ url_for('index') }}"><i class="fa-solid fa-house"></i> 首页</a>
+          <a href="{{ url_for('search_page') }}"><i class="fa-solid fa-magnifying-glass"></i> 搜索</a>
+          <a href="{{ url_for('leaderboard') }}"><i class="fa-solid fa-ranking-star"></i> 排行榜</a>
           <a href="javascript:void(0)" class="wallet-connect" id="connectMetaMaskBtn" onclick="connectMetaMaskNav()"><i class="fa-solid fa-wallet"></i> 连接 MetaMask</a>
           {% if current_user.is_authenticated %}
             <a href="{{ url_for('dashboard') }}"><i class="fa-solid fa-gauge"></i> 仪表盘</a>
+            <a href="{{ url_for('messages_inbox') }}" class="nav-notification">
+              <i class="fa-regular fa-envelope"></i> 私信
+              {% if unread_messages > 0 %}
+                <span class="notification-badge">{{ unread_messages }}</span>
+              {% endif %}
+            </a>
             <a href="{{ url_for('profile_view', username=current_user.username) }}"><i class="fa-solid fa-user"></i> 我的资料</a>
             <a href="{{ url_for('notifications') }}" class="nav-notification">
               <i class="fa-regular fa-bell"></i> 通知

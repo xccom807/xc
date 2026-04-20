@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+{% set title = '区块 #' ~ block.index ~ ' | 区块链详情' %}
+{% block content %}
+<div style="max-width:900px;margin:0 auto;padding:2rem 0;">
+  <div style="display:flex;align-items:center;gap:1rem;margin-bottom:2rem;">
+    <a href="{{ url_for('blockchain_blocks') }}" class="btn btn-small secondary"><i class="fa-solid fa-arrow-left"></i> 返回列表</a>
+    {% if prev_block %}
+      <a href="{{ url_for('blockchain_block_detail', block_id=prev_block.id) }}" class="btn btn-small secondary">← 上一区块</a>
+    {% endif %}
+    {% if next_block %}
+      <a href="{{ url_for('blockchain_block_detail', block_id=next_block.id) }}" class="btn btn-small secondary">下一区块 →</a>
+    {% endif %}
+  </div>
+
+  <div class="card" style="padding:2rem;">
+    <h2 style="color:var(--accent-color);margin-bottom:1.5rem;"><i class="fa-solid fa-cube"></i> 区块 #{{ block.index }}</h2>
+
+    <div class="grid grid-2" style="gap:1.5rem;margin-bottom:2rem;">
+      <div style="background:rgba(59,130,246,0.05);padding:1rem;border-radius:var(--border-radius);border-left:3px solid var(--accent-color);">
+        <div style="font-weight:600;margin-bottom:.5rem;">区块哈希</div>
+        <div style="font-family:monospace;font-size:.85rem;word-break:break-all;color:var(--text-muted);">{{ block.hash }}</div>
+      </div>
+      <div style="background:rgba(59,130,246,0.05);padding:1rem;border-radius:var(--border-radius);border-left:3px solid var(--accent-color);">
+        <div style="font-weight:600;margin-bottom:.5rem;">上一区块哈希</div>
+        <div style="font-family:monospace;font-size:.85rem;word-break:break-all;color:var(--text-muted);">{{ block.prev_hash or '（创世区块）' }}</div>
+      </div>
+      <div style="background:rgba(59,130,246,0.05);padding:1rem;border-radius:var(--border-radius);border-left:3px solid var(--accent-color);">
+        <div style="font-weight:600;margin-bottom:.5rem;">创建时间</div>
+        <div style="color:var(--text-muted);">{{ block.created_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}</div>
+      </div>
+      <div style="background:rgba(59,130,246,0.05);padding:1rem;border-radius:var(--border-radius);border-left:3px solid var(--accent-color);">
+        <div style="font-weight:600;margin-bottom:.5rem;">包含记录数</div>
+        <div style="color:var(--text-muted);">{{ statements|length }} 条</div>
+      </div>
+    </div>
+
+    <h3 style="margin-bottom:1rem;">区块中的记录</h3>
+    {% if statements %}
+      <div style="border:1px solid var(--border-color);border-radius:var(--border-radius);">
+        {% for s in statements %}
+          <div style="padding:1rem;border-bottom:1px solid var(--border-color);{% if loop.last %}border-bottom:none;{% endif %}">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+              <a href="{{ url_for('blockchain_statement_detail', statement_id=s.id) }}" style="font-weight:600;color:var(--accent-color);">
+                #{{ s.id }} · {{ s.kind }}
+              </a>
+              <small class="muted">{{ s.created_at.strftime('%H:%M:%S') }}</small>
+            </div>
+            {% if s.user %}
+              <div class="muted" style="font-size:.85rem;">用户: {{ s.user.username }}</div>
+            {% endif %}
+            <div style="background:rgba(0,0,0,0.02);padding:.5rem;border-radius:4px;font-family:monospace;font-size:.8rem;margin-top:.5rem;word-break:break-all;">
+              {{ s.payload | tojson }}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="muted">该区块暂无记录。</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

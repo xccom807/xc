@@ -20,6 +20,31 @@
 
       <p>{{ req.description|replace('\n', '<br>')|safe }}</p>
 
+      {# 求助者操作：编辑和取消 #}
+      {% if is_requester and req.status == 'open' %}
+        <div class="actions" style="margin-top:1rem; display:flex; gap:.75rem;">
+          <a class="btn btn-small" href="{{ url_for('edit_request', request_id=req.id) }}"><i class="fa-solid fa-pen"></i> 编辑求助</a>
+          <form method="post" action="{{ url_for('cancel_request', request_id=req.id) }}" style="display:inline;">
+            {{ cancel_form.hidden_tag() }}
+            <button class="btn btn-small danger" type="submit" onclick="return confirm('确认取消该求助吗？此操作不可撤销。')"><i class="fa-solid fa-xmark"></i> 取消求助</button>
+          </form>
+        </div>
+      {% elif is_requester and req.status == 'in_progress' %}
+        <div class="actions" style="margin-top:1rem;">
+          <form method="post" action="{{ url_for('cancel_request', request_id=req.id) }}" style="display:inline;">
+            {{ cancel_form.hidden_tag() }}
+            <button class="btn btn-small danger" type="submit" onclick="return confirm('任务正在进行中，确认取消吗？已接受的帮助将被撤回。')"><i class="fa-solid fa-xmark"></i> 取消求助</button>
+          </form>
+        </div>
+      {% endif %}
+
+      {# 举报按钮（非求助者可见） #}
+      {% if not is_requester and current_user.is_authenticated %}
+        <div style="margin-top:1rem;">
+          <a class="btn btn-small secondary" href="{{ url_for('flag_content', content_type='request', content_id=req.id) }}"><i class="fa-solid fa-flag"></i> 举报</a>
+        </div>
+      {% endif %}
+
       {% if is_requester %}
         <div class="section" style="margin-top:1rem;">
           <h3>收到的帮助申请（{{ all_offers|length }}）</h3>

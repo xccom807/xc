@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+{% block content %}
+<div style="max-width:1000px;margin:0 auto;padding:2rem 0;">
+  <h2 style="text-align:center;margin-bottom:2rem;"><i class="fa-solid fa-ranking-star"></i> 社区排行榜</h2>
+
+  <div class="grid grid-3" style="gap:2rem;">
+    <!-- 信誉排行 -->
+    <div class="card" style="padding:1.5rem;">
+      <h3 style="margin-bottom:1rem;color:var(--accent-color);"><i class="fa-solid fa-star"></i> 信誉排行</h3>
+      {% if top_reputation %}
+        <ol style="list-style:none;padding:0;margin:0;">
+          {% for u in top_reputation %}
+            <li style="display:flex;align-items:center;gap:.75rem;padding:.6rem 0;border-bottom:1px solid var(--border-color);">
+              <span style="font-weight:700;color:{% if loop.index <= 3 %}var(--accent-color){% else %}var(--text-muted){% endif %};min-width:1.5rem;">{{ loop.index }}</span>
+              <div class="avatar" style="width:32px;height:32px;border-radius:50%;background:var(--accent-color);display:flex;align-items:center;justify-content:center;color:#fff;font-size:.8rem;font-weight:700;flex-shrink:0;">
+                {{ (u.full_name or u.username)[0]|upper }}
+              </div>
+              <div style="flex:1;min-width:0;">
+                <a href="{{ url_for('profile_view', username=u.username) }}" style="font-weight:600;">{{ u.full_name or u.username }}</a>
+              </div>
+              <span style="font-weight:700;color:var(--accent-color);">{{ '%.1f'|format(u.reputation_score or 0) }}</span>
+            </li>
+          {% endfor %}
+        </ol>
+      {% else %}
+        <p class="muted">暂无数据</p>
+      {% endif %}
+    </div>
+
+    <!-- 帮助达人 -->
+    <div class="card" style="padding:1.5rem;">
+      <h3 style="margin-bottom:1rem;color:#22c55e;"><i class="fa-solid fa-hand-holding-heart"></i> 帮助达人</h3>
+      {% if top_helpers %}
+        <ol style="list-style:none;padding:0;margin:0;">
+          {% for u, count in top_helpers %}
+            <li style="display:flex;align-items:center;gap:.75rem;padding:.6rem 0;border-bottom:1px solid var(--border-color);">
+              <span style="font-weight:700;color:{% if loop.index <= 3 %}#22c55e{% else %}var(--text-muted){% endif %};min-width:1.5rem;">{{ loop.index }}</span>
+              <div class="avatar" style="width:32px;height:32px;border-radius:50%;background:#22c55e;display:flex;align-items:center;justify-content:center;color:#fff;font-size:.8rem;font-weight:700;flex-shrink:0;">
+                {{ (u.full_name or u.username)[0]|upper }}
+              </div>
+              <div style="flex:1;min-width:0;">
+                <a href="{{ url_for('profile_view', username=u.username) }}" style="font-weight:600;">{{ u.full_name or u.username }}</a>
+              </div>
+              <span style="font-weight:700;color:#22c55e;">{{ count }} 次</span>
+            </li>
+          {% endfor %}
+        </ol>
+      {% else %}
+        <p class="muted">暂无数据</p>
+      {% endif %}
+    </div>
+
+    <!-- 求助完成排行 -->
+    <div class="card" style="padding:1.5rem;">
+      <h3 style="margin-bottom:1rem;color:#f59e0b;"><i class="fa-solid fa-clipboard-check"></i> 任务完成榜</h3>
+      {% if top_requesters %}
+        <ol style="list-style:none;padding:0;margin:0;">
+          {% for u, count in top_requesters %}
+            <li style="display:flex;align-items:center;gap:.75rem;padding:.6rem 0;border-bottom:1px solid var(--border-color);">
+              <span style="font-weight:700;color:{% if loop.index <= 3 %}#f59e0b{% else %}var(--text-muted){% endif %};min-width:1.5rem;">{{ loop.index }}</span>
+              <div class="avatar" style="width:32px;height:32px;border-radius:50%;background:#f59e0b;display:flex;align-items:center;justify-content:center;color:#fff;font-size:.8rem;font-weight:700;flex-shrink:0;">
+                {{ (u.full_name or u.username)[0]|upper }}
+              </div>
+              <div style="flex:1;min-width:0;">
+                <a href="{{ url_for('profile_view', username=u.username) }}" style="font-weight:600;">{{ u.full_name or u.username }}</a>
+              </div>
+              <span style="font-weight:700;color:#f59e0b;">{{ count }} 次</span>
+            </li>
+          {% endfor %}
+        </ol>
+      {% else %}
+        <p class="muted">暂无数据</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

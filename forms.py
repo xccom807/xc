@@ -40,13 +40,13 @@ class RequestHelpForm(FlaskForm):
     category = SelectField(
         "分类",
         choices=[
-            ("Cooking", "烹饪"),
-            ("Cleaning", "清洁"),
-            ("Moving", "搬运"),
-            ("Tutoring", "辅导"),
-            ("Errands", "跑腿"),
-            ("Technical", "技术支持"),
-            ("Other", "其他"),
+            ("烹饪", "烹饪"),
+            ("清洁", "清洁"),
+            ("搬运", "搬运"),
+            ("辅导", "辅导"),
+            ("跑腿", "跑腿"),
+            ("技术支持", "技术支持"),
+            ("其他", "其他"),
         ],
         validators=[DataRequired()],
     )
@@ -75,14 +75,14 @@ class NGOForm(FlaskForm):
     category = SelectField(
         "分类",
         choices=[
-            ("Education", "教育"),
-            ("Healthcare", "医疗健康"),
-            ("Environment", "环境保护"),
-            ("Poverty Alleviation", "扶贫"),
-            ("Animal Welfare", "动物福利"),
-            ("Women & Children", "妇女儿童"),
-            ("Disaster Relief", "灾害救援"),
-            ("Other", "其他"),
+            ("教育", "教育"),
+            ("医疗健康", "医疗健康"),
+            ("环境保护", "环境保护"),
+            ("扶贫", "扶贫"),
+            ("动物福利", "动物福利"),
+            ("妇女儿童", "妇女儿童"),
+            ("灾害救援", "灾害救援"),
+            ("其他", "其他"),
         ],
         validators=[Optional()],
     )
@@ -134,3 +134,67 @@ class ReviewForm(FlaskForm):
     )
     comment = TextAreaField("评论", validators=[Optional(), Length(max=2000)])
     submit = SubmitField("提交评价")
+
+
+class CancelRequestForm(FlaskForm):
+    submit = SubmitField("取消求助")
+
+
+class EditRequestForm(FlaskForm):
+    title = StringField("标题", validators=[DataRequired(), Length(max=200)])
+    description = TextAreaField("描述", validators=[DataRequired(), Length(min=10)])
+    category = SelectField(
+        "分类",
+        choices=[
+            ("烹饪", "烹饪"),
+            ("清洁", "清洁"),
+            ("搬运", "搬运"),
+            ("辅导", "辅导"),
+            ("跑腿", "跑腿"),
+            ("技术支持", "技术支持"),
+            ("其他", "其他"),
+        ],
+        validators=[DataRequired()],
+    )
+    location = StringField("地点", validators=[Optional(), Length(max=120)])
+    datetime_needed = DateTimeLocalField(
+        "所需日期和时间", format="%Y-%m-%dT%H:%M", validators=[Optional()]
+    )
+    duration_estimate = StringField("预计时长", validators=[Optional(), Length(max=120)])
+    price_offered = DecimalField("出价", places=2, rounding=None, validators=[Optional()])
+    is_volunteer = BooleanField("这是志愿服务/免费请求")
+    skills_required = StringField("所需技能", validators=[Optional(), Length(max=200)])
+    notes = TextAreaField("补充说明", validators=[Optional(), Length(max=1000)])
+    submit = SubmitField("保存修改")
+
+
+class ChangePasswordForm(FlaskForm):
+    current_password = PasswordField("当前密码", validators=[DataRequired()])
+    new_password = PasswordField("新密码", validators=[DataRequired(), Length(min=6)])
+    confirm_password = PasswordField(
+        "确认新密码",
+        validators=[DataRequired(), EqualTo("new_password", message="两次输入的密码不一致")],
+    )
+    submit = SubmitField("修改密码")
+
+
+class FlagForm(FlaskForm):
+    reason = SelectField(
+        "举报原因",
+        choices=[
+            ("虚假信息", "虚假信息"),
+            ("欺诈行为", "欺诈行为"),
+            ("不当内容", "不当内容"),
+            ("骚扰行为", "骚扰行为"),
+            ("垃圾信息", "垃圾信息"),
+            ("其他", "其他"),
+        ],
+        validators=[DataRequired()],
+    )
+    detail = TextAreaField("详细说明", validators=[Optional(), Length(max=500)])
+    submit = SubmitField("提交举报")
+
+
+class MessageForm(FlaskForm):
+    content = TextAreaField("消息内容", validators=[DataRequired(), Length(min=1, max=2000)])
+    submit = SubmitField("发送")

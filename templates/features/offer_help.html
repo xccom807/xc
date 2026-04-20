@@ -1,158 +1,76 @@
 {% extends "base.html" %}
-
-{% block head_extra %}
-<style>
-.offer-help-container {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 2rem;
-}
-
-.offer-help-header {
-  text-align: center;
-  margin-bottom: 3rem;
-}
-
-.offer-help-header h1 {
-  color: var(--primary-color);
-  margin-bottom: 1rem;
-}
-
-.offer-help-header p {
-  color: var(--text-muted);
-  font-size: 1.1rem;
-}
-
-.help-options {
-  display: grid;
-  gap: 2rem;
-  margin-bottom: 3rem;
-}
-
-.help-option {
-  background: var(--panel-color);
-  border: 1px solid var(--border-color);
-  border-radius: var(--border-radius);
-  padding: 2rem;
-  text-align: center;
-  transition: all 0.3s ease;
-}
-
-.help-option:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  border-color: var(--accent-color);
-}
-
-.help-option-icon {
-  font-size: 3rem;
-  color: var(--accent-color);
-  margin-bottom: 1rem;
-}
-
-.help-option h3 {
-  color: var(--text-color);
-  margin-bottom: 1rem;
-}
-
-.help-option p {
-  color: var(--text-muted);
-  margin-bottom: 1.5rem;
-}
-
-.btn-primary {
-  background: var(--accent-color);
-  color: white;
-  padding: 0.75rem 2rem;
-  border: none;
-  border-radius: var(--border-radius);
-  text-decoration: none;
-  font-weight: 600;
-  transition: all 0.3s ease;
-  display: inline-block;
-}
-
-.btn-primary:hover {
-  background: var(--accent-color-dark, var(--accent-color));
-  transform: translateY(-1px);
-}
-
-.getting-started {
-  background: linear-gradient(135deg, var(--accent-color), var(--primary-color));
-  color: white;
-  padding: 2rem;
-  border-radius: var(--border-radius);
-  text-align: center;
-}
-
-.getting-started h2 {
-  margin-bottom: 1rem;
-}
-
-.getting-started p {
-  margin-bottom: 1.5rem;
-  opacity: 0.9;
-}
-
-.btn-secondary {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-  padding: 0.75rem 2rem;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-radius: var(--border-radius);
-  text-decoration: none;
-  font-weight: 600;
-  transition: all 0.3s ease;
-  display: inline-block;
-}
-
-.btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.5);
-}
-</style>
-{% endblock %}
-
 {% block content %}
-<div class="offer-help-container">
-  <div class="offer-help-header">
-    <h1><i class="fa-solid fa-hand-holding-heart"></i> 提供帮助</h1>
-    <p>选择你希望如何帮助社区中的其他人</p>
-  </div>
+<div style="max-width:1000px;margin:0 auto;padding:2rem 0;">
+  <h2 style="text-align:center;margin-bottom:.5rem;"><i class="fa-solid fa-hand-holding-heart"></i> 提供帮助</h2>
+  <p class="muted" style="text-align:center;margin-bottom:2rem;">浏览需要帮助的请求，选择你能帮助的任务</p>
 
-  <div class="help-options">
-    <div class="help-option">
-      <div class="help-option-icon">
-        <i class="fa-solid fa-search"></i>
+  {% if my_active_offers %}
+    <div class="card" style="padding:1.5rem;margin-bottom:2rem;">
+      <h3 style="margin-bottom:1rem;"><i class="fa-solid fa-clock"></i> 我的进行中帮助（{{ my_active_offers|length }}）</h3>
+      <div style="display:flex;flex-direction:column;gap:.5rem;">
+        {% for o in my_active_offers %}
+          <div style="display:flex;align-items:center;gap:1rem;padding:.75rem;background:var(--panel-color);border:1px solid var(--border-color);border-radius:var(--border-radius);">
+            <span class="badge {{ o.status }}">{{ '待处理' if o.status == 'pending' else '已接受' }}</span>
+            <a href="{{ url_for('request_detail', request_id=o.request_id) }}" style="flex:1;">
+              求助 #{{ o.request_id }} — {{ o.request.title if o.request else '查看详情' }}
+            </a>
+            <small class="muted">{{ o.created_at.strftime('%m-%d %H:%M') }}</small>
+          </div>
+        {% endfor %}
       </div>
-      <h3>浏览可接单需求</h3>
-      <p>查看你所在区域需要帮助的人发布的当前请求</p>
-      <a href="{{ url_for('marketplace') }}" class="btn btn-primary">浏览互助广场</a>
+    </div>
+  {% endif %}
+
+  <h3 style="margin-bottom:1rem;">可帮助的请求</h3>
+  {% if items %}
+    <div class="grid grid-3" style="gap:1.5rem;">
+      {% for r in items %}
+        <div class="card" style="padding:1.25rem;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.5rem;">
+            <h4 style="margin:0;"><a href="{{ url_for('request_detail', request_id=r.id) }}">{{ r.title }}</a></h4>
+            {% if r.is_volunteer %}
+              <span class="tag volunteer" style="flex-shrink:0;"><i class="fa-solid fa-heart"></i> 志愿</span>
+            {% elif r.price is not none %}
+              <span class="tag price" style="flex-shrink:0;">¥{{ '%.2f'|format(r.price) }}</span>
+            {% endif %}
+          </div>
+          <p class="muted" style="font-size:.85rem;margin-bottom:.75rem;">{{ r.description[:80] }}{% if r.description|length > 80 %}...{% endif %}</p>
+          <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem;">
+            {% if r.category %}<span class="tag">{{ r.category }}</span>{% endif %}
+            {% if r.location %}<span class="tag"><i class="fa-solid fa-location-dot"></i> {{ r.location }}</span>{% endif %}
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <small class="muted">{{ r.created_at.strftime('%m-%d %H:%M') }}</small>
+            {% if r.id in my_offer_ids %}
+              <span class="badge pending">已申请</span>
+            {% else %}
+              <a href="{{ url_for('request_detail', request_id=r.id) }}" class="btn btn-small">去帮助</a>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
     </div>
 
-    <div class="help-option">
-      <div class="help-option-icon">
-        <i class="fa-solid fa-plus-circle"></i>
+    {% if pagination.pages > 1 %}
+      <div style="display:flex;justify-content:center;gap:.5rem;margin-top:2rem;">
+        {% if pagination.has_prev %}
+          <a href="{{ url_for('offer_help', page=pagination.prev_num) }}" class="btn btn-small secondary">← 上一页</a>
+        {% endif %}
+        <span class="muted" style="padding:.5rem;">第 {{ pagination.page }} / {{ pagination.pages }} 页</span>
+        {% if pagination.has_next %}
+          <a href="{{ url_for('offer_help', page=pagination.next_num) }}" class="btn btn-small secondary">下一页 →</a>
+        {% endif %}
       </div>
-      <h3>参与社区志愿服务</h3>
-      <p>加入你所在区域的志愿机会和社区服务项目</p>
-      <a href="{{ url_for('volunteer') }}" class="btn btn-primary">查看志愿机会</a>
-    </div>
-
-    <div class="help-option">
-      <div class="help-option-icon">
-        <i class="fa-solid fa-users"></i>
+    {% endif %}
+  {% else %}
+    <div class="card" style="padding:3rem;text-align:center;">
+      <i class="fa-solid fa-check-circle" style="font-size:3rem;color:var(--accent-color);margin-bottom:1rem;display:block;"></i>
+      <p class="muted">当前没有需要帮助的请求。</p>
+      <div style="margin-top:1rem;display:flex;gap:1rem;justify-content:center;">
+        <a href="{{ url_for('volunteer') }}" class="btn secondary">查看志愿机会</a>
+        <a href="{{ url_for('marketplace') }}" class="btn secondary">浏览互助广场</a>
       </div>
-      <h3>支持公益组织</h3>
-      <p>连接经过验证的非政府组织并支持他们的事业</p>
-      <a href="{{ url_for('ngos') }}" class="btn btn-primary">浏览公益组织</a>
     </div>
-  </div>
-
-  <div class="getting-started">
-    <h2>准备开始了吗？</h2>
-    <p>你的援手可以真正改变他人的生活</p>
-    <a href="{{ url_for('marketplace') }}" class="btn btn-secondary">立即开始帮助</a>
-  </div>
+  {% endif %}
 </div>
 {% endblock %}

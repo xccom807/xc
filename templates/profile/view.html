@@ -18,6 +18,17 @@
         <div class="muted">加入于 {{ profile_user.created_at.strftime('%Y-%m-%d') }}</div>
       </div>
     </div>
+
+    {# 操作按钮 #}
+    <div class="actions" style="margin-top:1rem; display:flex; gap:.75rem; flex-wrap:wrap;">
+      {% if current_user.is_authenticated and current_user.id == profile_user.id %}
+        <a class="btn btn-small" href="{{ url_for('profile_edit') }}"><i class="fa-solid fa-pen"></i> 编辑资料</a>
+        <a class="btn btn-small secondary" href="{{ url_for('change_password') }}"><i class="fa-solid fa-lock"></i> 修改密码</a>
+      {% elif current_user.is_authenticated and current_user.id != profile_user.id %}
+        <a class="btn btn-small" href="{{ url_for('messages_chat', user_id=profile_user.id) }}"><i class="fa-regular fa-envelope"></i> 发送私信</a>
+        <a class="btn btn-small secondary" href="{{ url_for('flag_content', content_type='user', content_id=profile_user.id) }}"><i class="fa-solid fa-flag"></i> 举报用户</a>
+      {% endif %}
+    </div>
     {% if profile_user.bio %}<p style="margin-top:1rem; white-space:pre-wrap;">{{ profile_user.bio }}</p>{% endif %}
     {% if profile_user.skills %}<p><strong>技能:</strong> {{ profile_user.skills }}</p>{% endif %}
 

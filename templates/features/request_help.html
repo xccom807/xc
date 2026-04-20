@@ -93,8 +93,20 @@
                 {% endif %}
               </div>
               <p class="muted">{{ r.description[:140] }}{% if r.description|length > 140 %}...{% endif %}</p>
-              <div class="actions" style="margin-top:.75rem;">
+              <div class="actions" style="margin-top:.75rem; display:flex; gap:.5rem; flex-wrap:wrap;">
                 <a class="btn btn-small" href="{{ url_for('request_detail', request_id=r.id) }}">查看详情</a>
+                {% if r.status == 'open' %}
+                  <a class="btn btn-small secondary" href="{{ url_for('edit_request', request_id=r.id) }}"><i class="fa-solid fa-pen"></i> 编辑</a>
+                  <form method="post" action="{{ url_for('cancel_request', request_id=r.id) }}" style="display:inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-small danger" type="submit" onclick="return confirm('确认取消该求助吗？')"><i class="fa-solid fa-xmark"></i> 取消</button>
+                  </form>
+                {% elif r.status == 'in_progress' %}
+                  <form method="post" action="{{ url_for('cancel_request', request_id=r.id) }}" style="display:inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-small danger" type="submit" onclick="return confirm('任务正在进行中，确认取消吗？')"><i class="fa-solid fa-xmark"></i> 取消</button>
+                  </form>
+                {% endif %}
               </div>
             </div>
           {% endfor %}

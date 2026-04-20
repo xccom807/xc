@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="card" style="max-width:800px;margin:0 auto;">
+  <h2><i class="fa-regular fa-envelope"></i> 私信</h2>
+
+  {% if conversations %}
+    <div class="conversations-list">
+      {% for msg, partner in conversations %}
+        <a href="{{ url_for('messages_chat', user_id=partner.id) }}" class="conversation-item {% if unread_counts.get(partner.id, 0) > 0 %}unread{% endif %}" style="display:flex;align-items:center;gap:1rem;padding:1rem;border-bottom:1px solid var(--border-color);text-decoration:none;color:var(--text-color);transition:background .2s;">
+          <div class="avatar" style="width:40px;height:40px;border-radius:50%;background:var(--accent-color);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;flex-shrink:0;">
+            {{ (partner.full_name or partner.username)[0]|upper }}
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <strong>{{ partner.full_name or partner.username }}</strong>
+              <small class="muted">{{ msg.created_at.strftime('%m-%d %H:%M') }}</small>
+            </div>
+            <p class="muted" style="margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+              {% if msg.sender_id == current_user.id %}我: {% endif %}{{ msg.content[:60] }}
+            </p>
+          </div>
+          {% if unread_counts.get(partner.id, 0) > 0 %}
+            <span class="notification-badge">{{ unread_counts[partner.id] }}</span>
+          {% endif %}
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="muted" style="text-align:center;padding:3rem;">暂无私信。你可以在用户资料页发起对话。</p>
+  {% endif %}
+</div>
+
+<style>
+.conversation-item:hover { background: rgba(59,130,246,0.05); }
+.conversation-item.unread { background: rgba(59,130,246,0.08); }
+</style>
+{% endblock %}

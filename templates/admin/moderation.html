@@ -2,32 +2,57 @@
 {% block content %}
   <div class="admin-grid">
     <section class="admin-card">
-      <h2>被标记内容</h2>
+      <h2>举报审核</h2>
       {% if flags %}
         <table class="admin-table">
-          <thead><tr><th>ID</th><th>类型</th><th>内容ID</th><th>原因</th><th>状态</th><th>操作</th></tr></thead>
+          <thead><tr><th>ID</th><th>类型</th><th>内容ID</th><th>举报原因</th><th>状态</th><th>提交时间</th><th>操作</th></tr></thead>
           <tbody>
             {% for f in flags %}
               <tr>
                 <td>#{{ f.id }}</td>
-                <td>{{ f.content_type }}</td>
-                <td>{{ f.content_id }}</td>
+                <td>
+                  {% if f.content_type == 'request' %}求助
+                  {% elif f.content_type == 'user' %}用户
+                  {% elif f.content_type == 'review' %}评价
+                  {% else %}{{ f.content_type }}{% endif %}
+                </td>
+                <td>
+                  {% if f.content_type == 'request' %}
+                    <a href="{{ url_for('request_detail', request_id=f.content_id) }}">#{{ f.content_id }}</a>
+                  {% elif f.content_type == 'user' %}
+                    #{{ f.content_id }}
+                  {% else %}
+                    #{{ f.content_id }}
+                  {% endif %}
+                </td>
                 <td>{{ f.reason or '-' }}</td>
-                <td>{{ f.status }}</td>
+                <td>
+                  {% if f.status == 'pending' %}<span class="badge" style="background:#f59e0b;">待审核</span>
+                  {% elif f.status == 'approved' %}<span class="badge" style="background:#22c55e;">已通过</span>
+                  {% elif f.status == 'rejected' %}<span class="badge" style="background:#ef4444;">已驳回</span>
+                  {% else %}{{ f.status }}{% endif %}
+                </td>
+                <td>{{ f.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
                 <td class="action-cell">
-                  <form method="post" action="{{ url_for('admin_flag_action', flag_id=f.id, action='approve') }}" style="display:inline;">
-                    <button class="btn small" type="submit">通过</button>
-                  </form>
-                  <form method="post" action="{{ url_for('admin_flag_action', flag_id=f.id, action='reject') }}" style="display:inline;">
-                    <button class="btn danger small" type="submit">驳回</button>
-                  </form>
+                  {% if f.status == 'pending' %}
+                    <form method="post" action="{{ url_for('admin_flag_action', flag_id=f.id, action='approve') }}" style="display:inline;">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <button class="btn btn-small" type="submit" onclick="return confirm('确认通过该举报？被举报内容将被标记处理。')">通过</button>
+                    </form>
+                    <form method="post" action="{{ url_for('admin_flag_action', flag_id=f.id, action='reject') }}" style="display:inline;">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <button class="btn btn-small danger" type="submit" onclick="return confirm('确认驳回该举报？')">驳回</button>
+                    </form>
+                  {% else %}
+                    <span class="muted">已处理</span>
+                  {% endif %}
                 </td>
               </tr>
             {% endfor %}
           </tbody>
         </table>
       {% else %}
-        <p class="muted">暂无待处理的标记。</p>
+        <p class="muted">暂无举报记录。</p>
       {% endif %}
     </section>
 
@@ -44,9 +69,10 @@
                 <td>{{ n.location or '-' }}</td>
                 <td>{{ n.created_at.strftime('%Y-%m-%d') }}</td>
                 <td class="action-cell">
-                  <a class="btn small" href="{{ url_for('ngo_detail', ngo_id=n.id) }}">查看</a>
+                  <a class="btn btn-small" href="{{ url_for('ngo_detail', ngo_id=n.id) }}">查看</a>
                   <form method="post" action="{{ url_for('admin_verify_ngo', ngo_id=n.id) }}" style="display:inline;">
-                    <button class="btn small" type="submit">认证</button>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-small" type="submit">认证</button>
                   </form>
                 </td>
               </tr>
