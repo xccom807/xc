@@ -2628,6 +2628,91 @@ def create_app() -> Flask:
         stmt = Statement.query.get_or_404(statement_id)
         return render_template("blockchain/statement_detail.html", stmt=stmt)
 
+    # ── #13 AI 智能助手 ─────────────────────────────────────
+    KIMI_SYSTEM_PROMPT = """你是「每日互助」平台的智能助手，你的名字叫"小美"。
+你的职责是回答用户关于本平台功能、使用方法和常见问题的咨询。
+
+## 平台概述
+每日互助（DailyHelper）是一个基于 Flask + 区块链的社区互助平台。用户可以发布求助、提交帮助提议、完成任务后通过链上支付结算并互评，所有关键操作均记录在内部审计链并可锚定至以太坊 Sepolia 测试网。
+
+## 核心功能
+1. **用户系统**：注册/登录/个人资料/公开主页/信誉等级
+2. **互助任务全流程**：发布求助 → 帮助者提交提议 → 求助者接受 → 私聊沟通 → 标记完成 → 支付 → 互评
+3. **支付系统（两步链上结算）**：帮助者提交以太坊收款地址 → 求助者链上转账后上传 tx_hash
+4. **信誉系统（对数衰减）**：delta = base_points * (1/log2(当前分+2)) * 评论字数加成。分越高加分越少，鼓励详细评价
+5. **私信系统**：接受提议后双方可私聊
+6. **区块链审计**：所有操作记录为 Statement → 自动封块 Block → 可锚定 Sepolia
+7. **管理后台**：用户管理、举报审核、NGO 认证
+8. **其他**：全局搜索、排行榜、志愿专区、附近的人、公益组织
+
+## 常用页面
+- /dashboard 仪表盘  - /marketplace 帮助市场  - /request-help 发布求助
+- /messages 私信  - /notifications 通知  - /leaderboard 排行榜
+- /volunteer 志愿专区  - /nearby 附近的人  - /ngos 公益组织
+- /blockchain/blocks 区块浏览器  - /admin 管理后台（仅管理员）
+
+## 回答要求
+- 用简洁友好的中文回答
+- 如果问题与平台无关，礼貌引导回平台话题
+- 可以给出操作步骤建议
+- 不要编造平台没有的功能"""
+
+    @app.route("/chatbot")
+    @login_required
+    def chatbot():
+        return render_template("chatbot.html")
+
+    @app.route("/api/chatbot", methods=["POST"])
+    @csrf.exempt
+    @login_required
+    def chatbot_api():
+        import requests as http_requests
+
+        data = request.get_json(silent=True) or {}
+        user_message = (data.get("message") or "").strip()
+        history = data.get("history") or []
+
+        if not user_message:
+            return jsonify({"ok": False, "error": "消息不能为空"}), 400
+
+        api_key = app.config.get("KIMI_API_KEY", "")
+        model = app.config.get("KIMI_MODEL", "moonshot-v1-8k")
+
+        if not api_key:
+            return jsonify({"ok": False, "error": "AI 服务未配置"}), 500
+
+        # Build messages
+        messages = [{"role": "system", "content": KIMI_SYSTEM_PROMPT}]
+        for h in history[-10:]:  # keep last 10 turns
+            if h.get("role") in ("user", "assistant") and h.get("content"):
+                messages.append({"role": h["role"], "content": h["content"]})
+        messages.append({"role": "user", "content": user_message})
+
+        try:
+            resp = http_requests.post(
+                "https://api.moonshot.cn/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": model,
+                    "messages": messages,
+                    "temperature": 0.7,
+                    "max_tokens": 1024,
+                },
+                timeout=30,
+            )
+            resp.raise_for_status()
+            result = resp.json()
+            reply = result["choices"][0]["message"]["content"]
+            return jsonify({"ok": True, "reply": reply})
+        except http_requests.Timeout:
+            return jsonify({"ok": False, "error": "AI 响应超时，请稍后重试"}), 504
+        except Exception as e:
+            app.logger.error(f"Kimi API error: {e}")
+            return jsonify({"ok": False, "error": "AI 服务暂时不可用，请稍后重试"}), 502
+
     # Error handlers
     @app.errorhandler(404)
     def not_found_error(error):  # noqa: ANN001

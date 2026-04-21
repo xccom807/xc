@@ -33,3 +33,7 @@ class Config:
     BLOCKCHAIN_ANCHOR_AUTO = os.environ.get("BLOCKCHAIN_ANCHOR_AUTO", "true").strip().lower() in {"1", "true", "yes", "on"}
     # Internal blockchain batching (number of statements per block)
     BLOCK_SIZE = int(os.environ.get("BLOCK_SIZE", "10"))
+
+    # Kimi (Moonshot) AI chatbot
+    KIMI_API_KEY = os.environ.get("KIMI_API_KEY", "sk-Da4SeV8pnNnM2J1FrBgv7b9C1pPBLjqI0k6HXWPc8d6gwRaT")
+    KIMI_MODEL = os.environ.get("KIMI_MODEL", "moonshot-v1-8k")

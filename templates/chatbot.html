@@ -1,0 +1,182 @@
+{% extends 'base.html' %}
+{% set title = '智能助手 | 每日互助' %}
+{% block content %}
+<div style="max-width:760px;margin:0 auto;padding:1.5rem 0 2rem;display:flex;flex-direction:column;height:calc(100vh - 180px);min-height:500px;">
+
+  {# Header #}
+  <div style="display:flex;align-items:center;gap:0.8rem;margin-bottom:1rem;">
+    <div style="width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);display:flex;align-items:center;justify-content:center;">
+      <i class="fa-solid fa-robot" style="font-size:1.3rem;color:#fff;"></i>
+    </div>
+    <div>
+      <h1 style="font-size:1.3rem;font-weight:700;margin:0;">小美 — 智能助手</h1>
+      <p style="font-size:0.8rem;color:var(--text-muted);margin:0;">有关平台的任何问题，都可以问我</p>
+    </div>
+  </div>
+
+  {# Chat area #}
+  <div id="chatArea" style="flex:1;overflow-y:auto;border:1px solid var(--border-color);border-radius:var(--radius);background:var(--panel);padding:1rem;display:flex;flex-direction:column;gap:0.8rem;">
+
+    {# Welcome message #}
+    <div class="msg-bot" style="display:flex;gap:0.6rem;align-items:flex-start;">
+      <div style="flex-shrink:0;width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#3b82f6,#8b5cf6);display:flex;align-items:center;justify-content:center;">
+        <i class="fa-solid fa-robot" style="font-size:0.8rem;color:#fff;"></i>
+      </div>
+      <div style="max-width:80%;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:0 var(--radius) var(--radius) var(--radius);padding:0.8rem 1rem;font-size:0.9rem;line-height:1.6;">
+        你好！我是「每日互助」平台的智能助手<strong>小美</strong>。你可以问我关于平台功能的任何问题，比如：
+        <ul style="margin:0.5rem 0 0 1.2rem;padding:0;">
+          <li>如何发布一条求助？</li>
+          <li>支付流程是怎样的？</li>
+          <li>信誉分是如何计算的？</li>
+          <li>如何和帮助者私聊？</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  {# Input area #}
+  <div style="display:flex;gap:0.6rem;margin-top:0.8rem;">
+    <input id="chatInput" type="text" placeholder="输入你的问题..." maxlength="500"
+      style="flex:1;padding:0.75rem 1rem;border:1px solid var(--border-color);border-radius:var(--radius);background:var(--panel);color:var(--fg);font-size:0.9rem;outline:none;transition:border-color 0.2s;"
+      onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border-color)'" />
+    <button id="sendBtn" onclick="sendMessage()"
+      style="padding:0.75rem 1.4rem;border:none;border-radius:var(--radius);background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:#fff;font-size:0.9rem;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:0.4rem;transition:opacity 0.2s;">
+      <i class="fa-solid fa-paper-plane"></i> 发送
+    </button>
+  </div>
+  <div style="text-align:center;margin-top:0.4rem;">
+    <span style="font-size:0.75rem;color:var(--text-muted);">AI 回答仅供参考，由 Kimi 大模型提供支持</span>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const chatArea = document.getElementById('chatArea');
+const chatInput = document.getElementById('chatInput');
+const sendBtn = document.getElementById('sendBtn');
+let chatHistory = [];
+let sending = false;
+
+chatInput.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+function appendMessage(role, content) {
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText = 'display:flex;gap:0.6rem;align-items:flex-start;' +
+    (role === 'user' ? 'flex-direction:row-reverse;' : '');
+
+  const avatar = document.createElement('div');
+  avatar.style.cssText = 'flex-shrink:0;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;';
+  if (role === 'user') {
+    avatar.style.background = 'linear-gradient(135deg,#22c55e,#16a34a)';
+    avatar.innerHTML = '<i class="fa-solid fa-user" style="font-size:0.8rem;color:#fff;"></i>';
+  } else {
+    avatar.style.background = 'linear-gradient(135deg,#3b82f6,#8b5cf6)';
+    avatar.innerHTML = '<i class="fa-solid fa-robot" style="font-size:0.8rem;color:#fff;"></i>';
+  }
+
+  const bubble = document.createElement('div');
+  bubble.style.cssText = 'max-width:80%;border:1px solid var(--border-color);padding:0.8rem 1rem;font-size:0.9rem;line-height:1.6;word-break:break-word;';
+  if (role === 'user') {
+    bubble.style.background = 'rgba(59,130,246,0.1)';
+    bubble.style.borderRadius = 'var(--radius) 0 var(--radius) var(--radius)';
+    bubble.textContent = content;
+  } else {
+    bubble.style.background = 'var(--bg-secondary)';
+    bubble.style.borderRadius = '0 var(--radius) var(--radius) var(--radius)';
+    bubble.innerHTML = formatMarkdown(content);
+  }
+
+  wrapper.appendChild(avatar);
+  wrapper.appendChild(bubble);
+  chatArea.appendChild(wrapper);
+  chatArea.scrollTop = chatArea.scrollHeight;
+  return bubble;
+}
+
+function formatMarkdown(text) {
+  // Simple markdown: bold, code, newlines, lists
+  let html = text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`(.*?)`/g, '<code style="background:rgba(96,165,250,0.12);padding:0.1rem 0.3rem;border-radius:4px;font-size:0.85em;">$1</code>')
+    .replace(/\n- /g, '\n<br>• ')
+    .replace(/\n(\d+)\. /g, '\n<br>$1. ')
+    .replace(/\n/g, '<br>');
+  return html;
+}
+
+function showLoading() {
+  const wrapper = document.createElement('div');
+  wrapper.id = 'loadingMsg';
+  wrapper.style.cssText = 'display:flex;gap:0.6rem;align-items:flex-start;';
+  wrapper.innerHTML = `
+    <div style="flex-shrink:0;width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#3b82f6,#8b5cf6);display:flex;align-items:center;justify-content:center;">
+      <i class="fa-solid fa-robot" style="font-size:0.8rem;color:#fff;"></i>
+    </div>
+    <div style="max-width:80%;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:0 var(--radius) var(--radius) var(--radius);padding:0.8rem 1rem;font-size:0.9rem;color:var(--text-muted);">
+      <i class="fa-solid fa-spinner fa-spin"></i> 小美正在思考...
+    </div>`;
+  chatArea.appendChild(wrapper);
+  chatArea.scrollTop = chatArea.scrollHeight;
+}
+
+function removeLoading() {
+  const el = document.getElementById('loadingMsg');
+  if (el) el.remove();
+}
+
+async function sendMessage() {
+  if (sending) return;
+  const msg = chatInput.value.trim();
+  if (!msg) return;
+
+  chatInput.value = '';
+  appendMessage('user', msg);
+  chatHistory.push({ role: 'user', content: msg });
+
+  sending = true;
+  sendBtn.disabled = true;
+  sendBtn.style.opacity = '0.6';
+  showLoading();
+
+  try {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content
+      || document.querySelector('input[name="csrf_token"]')?.value || '';
+
+    const resp = await fetch('/api/chatbot', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken,
+      },
+      body: JSON.stringify({ message: msg, history: chatHistory }),
+    });
+
+    removeLoading();
+    const data = await resp.json();
+
+    if (data.ok) {
+      appendMessage('assistant', data.reply);
+      chatHistory.push({ role: 'assistant', content: data.reply });
+    } else {
+      appendMessage('assistant', '抱歉，出现了错误：' + (data.error || '未知错误'));
+    }
+  } catch (err) {
+    removeLoading();
+    appendMessage('assistant', '网络连接失败，请检查网络后重试。');
+  } finally {
+    sending = false;
+    sendBtn.disabled = false;
+    sendBtn.style.opacity = '1';
+    chatInput.focus();
+  }
+}
+</script>
+{% endblock %}
