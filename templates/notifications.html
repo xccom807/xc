@@ -7,22 +7,28 @@
   </h1>
 
   {% if items %}
+    {% set icon_map = {
+      'offer_received': 'fa-solid fa-hand-holding-heart',
+      'offer_accepted': 'fa-solid fa-circle-check',
+      'offer_rejected': 'fa-solid fa-circle-xmark',
+      'task_completed': 'fa-solid fa-flag-checkered',
+      'review_received': 'fa-solid fa-star',
+      'new_message': 'fa-solid fa-envelope',
+      'payment_address': 'fa-solid fa-wallet',
+      'payment_received': 'fa-solid fa-coins',
+    } %}
+    {% set color_map = {
+      'offer_received': '#3b82f6',
+      'offer_accepted': '#22c55e',
+      'offer_rejected': '#ef4444',
+      'task_completed': '#f59e0b',
+      'review_received': '#a855f7',
+      'new_message': '#06b6d4',
+      'payment_address': '#f97316',
+      'payment_received': '#10b981',
+    } %}
     <div>
       {% for n in items %}
-        {% set icon_map = {
-          'offer_received': 'fa-solid fa-hand-holding-heart',
-          'offer_accepted': 'fa-solid fa-circle-check',
-          'offer_rejected': 'fa-solid fa-circle-xmark',
-          'task_completed': 'fa-solid fa-flag-checkered',
-          'review_received': 'fa-solid fa-star',
-        } %}
-        {% set color_map = {
-          'offer_received': '#3b82f6',
-          'offer_accepted': '#22c55e',
-          'offer_rejected': '#ef4444',
-          'task_completed': '#f59e0b',
-          'review_received': '#a855f7',
-        } %}
         <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem;border-bottom:1px solid var(--border-color);{% if not n.is_read %}background:rgba(59,130,246,0.04);{% endif %}">
           <div style="flex-shrink:0;width:36px;height:36px;border-radius:50%;background:{{ color_map.get(n.kind, '#6b7280') }}22;display:flex;align-items:center;justify-content:center;color:{{ color_map.get(n.kind, '#6b7280') }};">
             <i class="{{ icon_map.get(n.kind, 'fa-regular fa-bell') }}"></i>
@@ -43,6 +49,28 @@
         </div>
       {% endfor %}
     </div>
+
+    {% if pagination.pages > 1 %}
+      <div style="display:flex;justify-content:center;gap:0.5rem;padding:1.5rem 0;">
+        {% if pagination.has_prev %}
+          <a href="?page={{ pagination.prev_num }}" class="btn btn-sm" style="padding:0.4rem 0.9rem;font-size:0.85rem;">上一页</a>
+        {% endif %}
+        {% for p in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+          {% if p %}
+            {% if p == pagination.page %}
+              <span style="padding:0.4rem 0.9rem;font-size:0.85rem;background:var(--accent);color:#fff;border-radius:var(--radius-sm);">{{ p }}</span>
+            {% else %}
+              <a href="?page={{ p }}" style="padding:0.4rem 0.9rem;font-size:0.85rem;color:var(--text-muted);text-decoration:none;border:1px solid var(--border-color);border-radius:var(--radius-sm);">{{ p }}</a>
+            {% endif %}
+          {% else %}
+            <span style="padding:0.4rem 0.3rem;color:var(--text-muted);">...</span>
+          {% endif %}
+        {% endfor %}
+        {% if pagination.has_next %}
+          <a href="?page={{ pagination.next_num }}" class="btn btn-sm" style="padding:0.4rem 0.9rem;font-size:0.85rem;">下一页</a>
+        {% endif %}
+      </div>
+    {% endif %}
   {% else %}
     <div style="text-align:center;padding:4rem 2rem;color:var(--text-muted);">
       <i class="fa-regular fa-bell" style="font-size:3rem;margin-bottom:1rem;display:block;opacity:0.3;"></i>

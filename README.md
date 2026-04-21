@@ -1,122 +1,212 @@
 # Kaspersky-519-WT-05（每日互助 / DailyHelper）
 
-一个基于 Flask 的社区互助平台，支持用户发布求助、提交帮助提议、任务协作与评价，并集成了“内部区块链式审计日志”与可选 Web3 连接能力。  
-本 README 基于当前仓库代码结构与实现重新整理，可直接用于项目接手、部署与二次开发。
+一个基于 **Flask + 区块链** 的社区互助平台。用户可以发布求助、提交帮助提议、完成任务后通过链上支付结算并互评，所有关键操作均记录在内部审计链并可锚定至以太坊 Sepolia 测试网。
 
 ## 目录
 
-- [项目概览](#项目概览)
+- [系统架构](#系统架构)
 - [核心功能](#核心功能)
-- [技术栈与架构](#技术栈与架构)
+- [数据模型](#数据模型)
 - [项目结构](#项目结构)
 - [快速开始](#快速开始)
+- [演示数据](#演示数据)
 - [配置说明](#配置说明)
-- [运行与使用示例](#运行与使用示例)
-- [开发指南](#开发指南)
-- [贡献规范](#贡献规范)
+- [页面路由一览](#页面路由一览)
+- [答辩演示流程](#答辩演示流程)
 - [常见问题](#常见问题)
 - [许可证](#许可证)
 
-## 项目概览
+## 系统架构
 
-### 定位
+### 技术栈
 
-“每日互助”用于连接“需要帮助的人”和“愿意提供帮助的人”，并提供以下能力：
+| 层面 | 技术 |
+|---|---|
+| **后端框架** | Flask 3.x（应用工厂 `create_app()`） |
+| **数据库** | Flask-SQLAlchemy + SQLite（默认） |
+| **用户认证** | Flask-Login + Flask-WTF（CSRF） |
+| **区块链** | 内部审计链（Block/Statement 哈希链） + web3.py（Sepolia 锚定） |
+| **钱包** | MetaMask 签名验证（challenge-response） |
+| **前端** | Jinja2 模板 + 原生 CSS/JS + Font Awesome |
 
-- 求助发布与浏览（付费/志愿两类）
-- 提议、接单、任务完成闭环
-- 双向评价与信誉分
-- 公益组织（NGO）展示与提交审核
-- 管理员审核、封禁与内容治理
-- 内部审计链（Statement -> Block）可视化追踪
-- 可选 Web3 RPC 连接状态与链上区块查看
+### 架构总览
 
-### 当前实现形态
+```
+┌─────────────────────────────────────────────────────────┐
+│                     浏览器 (用户/管理员)                    │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────────┐  │
+│  │ 仪表盘    │ │ 市场/详情 │ │ 私信/通知 │ │ 管理后台    │  │
+│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └─────┬──────┘  │
+└───────┼────────────┼────────────┼──────────────┼─────────┘
+        │            │            │              │
+        ▼            ▼            ▼              ▼
+┌─────────────────────────────────────────────────────────┐
+│                    Flask 应用 (app.py)                    │
+│                                                          │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────────┐  │
+│  │ 用户认证  │ │ 任务管理  │ │ 支付流程  │ │ 信誉系统    │  │
+│  │ 注册/登录 │ │ CRUD     │ │ 地址→转账 │ │ 对数衰减    │  │
+│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └─────┬──────┘  │
+│       │            │            │              │          │
+│       ▼            ▼            ▼              ▼          │
+│  ┌────────────────────────────────────────────────────┐  │
+│  │            SQLAlchemy ORM (models.py)               │  │
+│  │  User | HelpRequest | HelpOffer | Review | Payment  │  │
+│  │  Message | Notification | NGO | Flag | Block | ...   │  │
+│  └──────────────────────┬─────────────────────────────┘  │
+│                         │                                 │
+│  ┌──────────────────────▼─────────────────────────────┐  │
+│  │          内部区块链 (blockchain_service.py)           │  │
+│  │  Statement ──封块──> Block (prev_hash -> hash 链)    │  │
+│  └──────────────────────┬─────────────────────────────┘  │
+└─────────────────────────┼────────────────────────────────┘
+                          │ 锚定 (submit_anchor_transaction)
+                          ▼
+              ┌───────────────────────┐
+              │  Ethereum Sepolia     │
+              │  (web3.py + Infura)   │
+              └───────────────────────┘
+```
 
-- 后端：单体 Flask 应用，应用工厂模式 `create_app()`
-- 数据层：Flask-SQLAlchemy + SQLite（默认）
-- 前端：Jinja2 模板 + 原生 CSS/JS
-- 鉴权：Flask-Login + Flask-WTF（含 CSRF）
+### 业务流程
+
+```
+用户A (求助者)                          用户B (帮助者)
+    │                                       │
+    │── 1. 发布求助 ───────────────────────>│
+    │                                       │
+    │<── 2. 提交帮助提议 ──────────────────│
+    │                                       │
+    │── 3. 接受提议 (自动拒绝其他) ───────>│
+    │                                       │
+    │<─────── 4. 私聊沟通 ────────────────>│
+    │                                       │
+    │── 5. 标记任务完成 ──────────────────>│
+    │                                       │
+    │<── 6. 帮助者提交收款地址 ────────────│
+    │                                       │
+    │── 7. 求助者链上转账 + 上传 tx_hash ─>│
+    │                                       │
+    │<─────── 8. 双向评价 ────────────────>│
+    │         (对数衰减信誉分更新)            │
+    │                                       │
+    ▼         全程上链审计                    ▼
+```
 
 ## 核心功能
 
-### 用户与身份
+### 1. 用户系统
+- 注册 / 登录 / 登出 / 忘记密码 / 重置密码 / 修改密码
+- 个人资料编辑（技能、简介、头像、经纬度）
+- 公开主页（信誉分、评价、完成率、信誉等级）
 
-- 注册/登录/退出
-- 个人资料编辑（含技能、简介、头像 URL、经纬度）
-- 公开个人主页（历史评价、信誉层级、完成率）
+### 2. 互助任务全流程
+- **发布求助**：分类、描述、地点、时段、预算、志愿标签
+- **帮助市场**：分类/地点/价格区间/日期/排序 多维筛选 + 分页
+- **任务详情页**：提交提议 -> 接受 -> 执行 -> 完成 -> 支付 -> 评价
+- **防重复提交**：同一帮助者不能对同一求助重复提交提议
+- **编辑/取消**：求助者可编辑开放状态的求助，或取消求助
 
-### 互助任务
+### 3. 支付系统（两步链上结算）
+1. 任务完成后，**帮助者**提交以太坊收款地址（含地址格式校验）
+2. **求助者**在链上转账后，上传交易哈希（tx_hash）作为支付凭证
+3. 系统记录支付状态，双方均可查看 Etherscan 链接
 
-- 发布求助（分类、描述、地点、时段、预算、志愿选项）
-- 市场页筛选检索（分类/地点/价格区间/日期/排序）
-- 求助详情页：
-  - 提交帮助提议
-  - 求助方接受某个提议（其余自动拒绝）
-  - 标记任务完成
-  - 双方评价与信誉分变更
+### 4. 评价与信誉（对数衰减算法）
+- 双方可对已完成任务进行 1-5 星评价 + 文字评论
+- **信誉公式**：`delta = base_points * (1 / log2(当前分 + 2)) * 评论字数加成`
+  - 分越高，加分越少（对数衰减）
+  - 评论越详细，加成越大（鼓励认真评价）
+  - 负面评价不衰减（始终全额扣分）
+- 信誉等级：新手(0-20) -> 帮助者(20-50) -> 可信赖(50-80) -> 专家(80+)
+- 信誉快照可一键上链锚定，生成可验证 JSON 证明
 
-### 志愿与社区
+### 5. 私信系统
+- 接受提议后，双方可进入私聊（入口在任务详情页）
+- 消息收件箱 + 实时未读角标
+- 新消息自动通知
 
-- 志愿服务专区（仅志愿任务）
-- 附近的人（根据经纬度 + Haversine 距离计算）
-- NGO 列表、详情、提交与后台审核
+### 6. 通知系统
+- 全局通知（提议、接受、拒绝、完成、评价、支付、私信等事件）
+- 导航栏未读角标提醒
 
-### 管理后台
+### 7. 区块链审计
+- **内部链**：所有关键操作（注册/登录/发布/接受/支付/评价等）记录为 Statement
+- **自动封块**：达到阈值后封装为 Block（prev_hash -> hash 哈希链）
+- **链上锚定**：区块哈希可锚定至 Ethereum Sepolia 测试网
+- **区块浏览器**：`/blockchain/blocks` -> 区块详情 -> Statement 详情
+- **钱包绑定**：MetaMask 签名验证（challenge-response 协议）
 
-- 管理仪表盘（用户、任务、标记统计）
-- 用户管理（搜索、拉黑、解除拉黑、删除）
-- 审核中心（Flag 处理、NGO 验证）
+### 8. 其他功能
+- **全局搜索**：同时搜索求助和用户
+- **排行榜**：信誉分 / 帮助次数 / 求助完成 三维排行
+- **志愿专区**：专属志愿服务筛选页面
+- **附近的人**：Haversine 公式 + 距离/信誉/技能筛选
+- **公益组织**：NGO 列表、详情、提交审核
+- **举报系统**：举报求助/用户/评价 + 管理员审核处置
+- **管理后台**：仪表盘 / 用户管理(拉黑/删除) / 审核中心(Flag+NGO)
+- **仪表盘**：4 标签页（概览+快捷操作 / 资料+信誉+评价 / 我的求助 / 我的帮助）
 
-### 区块链相关能力
+## 数据模型
 
-- 内部审计链：
-  - 应用行为记录为 `Statement`
-  - 达到阈值后封装为 `Block`（哈希链）
-- 区块浏览页面：`/blockchain/blocks`
-- 区块观察脚本：`watch_blocks.py`
-- 可选 Web3 RPC：`/web3`、`/web3/balance`
+```
+User ──────┬──> HelpRequest ──> HelpOffer ──> Review
+           │         │              │
+           │         v              │
+           │      Payment <─────────┘
+           │
+           ├──> WalletLink (MetaMask 绑定)
+           ├──> Message (私信)
+           ├──> Notification (通知)
+           └──> Statement ──> Block (内部区块链)
 
-## 技术栈与架构
+独立模型：NGO、Flag、PasswordResetToken
+```
 
-### 后端
-
-- Flask 3.x
-- Flask-SQLAlchemy / SQLAlchemy 2.x
-- Flask-Login
-- Flask-WTF + WTForms
-
-### 区块链/网络
-
-- web3.py
-- requests / aiohttp / websockets（依赖中已包含）
-
-### 前端
-
-- Jinja2 模板
-- 静态资源：`static/css/main.css`、`static/js/main.js`
-- 页面模板：`templates/` 下按模块拆分
+| 模型 | 说明 |
+|---|---|
+| `User` | 用户（含信誉分、经纬度、黑名单状态） |
+| `HelpRequest` | 求助请求（open -> in_progress -> completed/cancelled） |
+| `HelpOffer` | 帮助提议（pending -> accepted/rejected -> completed） |
+| `Review` | 双向评价（1-5 星 + 评论） |
+| `Payment` | 支付记录（address_submitted -> paid） |
+| `Message` | 私信消息 |
+| `Notification` | 站内通知 |
+| `WalletLink` | MetaMask 钱包绑定 |
+| `Block` | 内部区块链区块 |
+| `Statement` | 区块链审计日志条目 |
+| `NGO` | 公益组织 |
+| `Flag` | 举报记录 |
 
 ## 项目结构
 
 ```text
 Kaspersky-519-WT-05-main/
-├─ app.py                    # Flask 应用入口与主要路由
+├─ app.py                    # Flask 应用入口与全部路由（约 2600 行）
 ├─ config.py                 # 环境配置（SECRET_KEY、DB、Web3、日志等）
-├─ models.py                 # 数据模型（User/HelpRequest/HelpOffer/...）
-├─ forms.py                  # 表单定义与校验
-├─ extensions.py             # db/login/csrf 扩展实例
+├─ models.py                 # 数据模型（12 个模型类）
+├─ forms.py                  # WTForms 表单定义（11 个表单类）
+├─ extensions.py             # db / login_manager / csrf 扩展实例
 ├─ blockchain_service.py     # 内部审计链写入与封块逻辑
-├─ web3_service.py           # Web3 客户端初始化与获取
-├─ watch_blocks.py           # 区块观察工具（internal/core）
+├─ web3_service.py           # Web3 客户端初始化与链上锚定
+├─ watch_blocks.py           # 区块观察工具
 ├─ init_db.py                # 初始化数据库
 ├─ create_admin.py           # 创建默认管理员
+├─ seed_demo_data.py         # 灌入演示数据（答辩用）
 ├─ scripts/
 │  └─ migrate_sqlite.py      # SQLite 增量迁移脚本
-├─ templates/                # 页面模板（auth/features/admin/profile/...）
-├─ static/                   # 静态资源
+├─ templates/                # 42 个 Jinja2 页面模板
+│  ├─ auth/                  #   注册/登录/密码重置
+│  ├─ features/              #   求助/帮助/市场/详情/NGO/志愿/附近
+│  ├─ admin/                 #   管理后台
+│  ├─ blockchain/            #   区块浏览器
+│  ├─ messages/              #   私信收件箱/聊天
+│  ├─ profile/               #   个人主页/编辑
+│  ├─ wallet/                #   钱包绑定
+│  └─ web3/                  #   Web3 状态
+├─ static/                   # CSS / JS 静态资源
 ├─ requirements.txt          # 完整依赖（锁定版本）
-└─ requirements.app.txt      # 应用关键依赖（运行建议安装）
+└─ requirements.app.txt      # 应用关键依赖
 ```
 
 ## 快速开始
@@ -135,22 +225,29 @@ myenv\Scripts\activate
 
 ### 3) 安装依赖
 
-推荐先安装完整依赖，再补充应用关键依赖：
-
 ```bat
 pip install -r requirements.txt
 pip install -r requirements.app.txt
 ```
 
-### 4) 初始化数据库（可选）
-
-应用首次运行会自动 `create_all()`，也可手动执行：
+### 4) 初始化数据库并创建管理员
 
 ```bat
 python init_db.py
+python create_admin.py
 ```
 
-### 5) 启动应用
+> 应用首次运行也会自动 `create_all()`，`init_db.py` 为可选步骤。
+
+### 5) 灌入演示数据（推荐）
+
+```bat
+python seed_demo_data.py
+```
+
+该脚本会创建多个测试用户、求助任务、帮助提议、评价和私信，方便直接体验完整流程。详见 [演示数据](#演示数据) 章节。
+
+### 6) 启动应用
 
 ```bat
 python app.py
@@ -158,11 +255,30 @@ python app.py
 
 启动后访问：`http://127.0.0.1:5000`
 
-也可使用仓库脚本：
+## 演示数据
 
-```bat
-run_app.bat
-```
+运行 `python seed_demo_data.py` 后，系统中将包含以下预置数据：
+
+### 测试账号
+
+| 角色 | 用户名 | 邮箱 | 密码 |
+|---|---|---|---|
+| 管理员 | `admin` | `admin@dailyhelper.com` | `admin123` |
+| 求助者 | `alice` | `alice@test.com` | `test123` |
+| 帮助者 | `bob` | `bob@test.com` | `test123` |
+| 帮助者 | `charlie` | `charlie@test.com` | `test123` |
+| 普通用户 | `diana` | `diana@test.com` | `test123` |
+| 普通用户 | `eve` | `eve@test.com` | `test123` |
+
+### 预置内容
+
+- **6 条求助**（覆盖不同分类、付费/志愿、不同状态）
+- **8 条帮助提议**（覆盖 pending/accepted/completed/rejected 状态）
+- **4 条评价**（含不同星级和评论长度，信誉分已按对数公式计算）
+- **私信对话**（alice 与 bob 之间的任务沟通消息）
+- **1 个已完成的支付记录**（含收款地址和交易哈希）
+- **2 个 NGO**（1 个已认证、1 个待审核）
+- **1 条举报**（待管理员处理）
 
 ## 配置说明
 
@@ -173,133 +289,106 @@ run_app.bat
 | `SECRET_KEY` | `change-this-in-production` | Flask 会话与安全密钥 |
 | `DATABASE_URL` | `sqlite:///app.db` | SQLAlchemy 连接串 |
 | `LOG_LEVEL` | `INFO` | 日志级别 |
-| `ETH_RPC_URL` | 空 | Web3 RPC 地址（可选） |
-| `ETH_CHAIN_NAME` | 空 | 链名称（展示用途） |
+| `ETH_RPC_URL` | Sepolia Infura | Web3 RPC 地址 |
+| `ETH_CHAIN_NAME` | `sepolia` | 链名称 |
+| `ETH_SIGNER_PRIVATE_KEY` | 已配置测试密钥 | 链上签名私钥 |
 | `BLOCK_SIZE` | `10` | 内部审计链封块阈值 |
 
-PowerShell 示例：
+## 页面路由一览
 
-```powershell
-$env:SECRET_KEY="replace-with-a-strong-secret"
-$env:DATABASE_URL="sqlite:///app.db"
-$env:ETH_RPC_URL=""
-$env:BLOCK_SIZE="10"
-python app.py
-```
+| 路由 | 说明 | 权限 |
+|---|---|---|
+| `/signup` | 注册 | 公开 |
+| `/login` | 登录 | 公开 |
+| `/dashboard` | 仪表盘（4 标签页） | 登录 |
+| `/request-help` | 发布求助 | 登录 |
+| `/marketplace` | 帮助市场（筛选+分页） | 公开 |
+| `/requests/<id>` | 求助详情（提议/接受/完成/支付/评价） | 登录 |
+| `/offer-help` | 浏览可帮助的求助 | 登录 |
+| `/my-offers` | 我的帮助记录 | 登录 |
+| `/messages` | 私信收件箱 | 登录 |
+| `/messages/<user_id>` | 私聊对话 | 登录 |
+| `/notifications` | 通知列表 | 登录 |
+| `/search` | 全局搜索 | 公开 |
+| `/leaderboard` | 排行榜 | 公开 |
+| `/volunteer` | 志愿专区 | 公开 |
+| `/nearby` | 附近的人 | 登录 |
+| `/ngos` | 公益组织列表 | 公开 |
+| `/u/<username>` | 用户公开主页 | 公开 |
+| `/connect-wallet` | MetaMask 钱包绑定 | 登录 |
+| `/blockchain/blocks` | 区块浏览器 | 登录 |
+| `/web3` | Web3 连接状态 | 公开 |
+| `/admin` | 管理后台 | 管理员 |
+| `/admin/users` | 用户管理 | 管理员 |
+| `/admin/moderation` | 审核中心 | 管理员 |
 
-## 运行与使用示例
+## 答辩演示流程
 
-### 常用页面入口
+以下是建议的答辩演示顺序，覆盖所有核心功能：
 
-- `/signup`：注册
-- `/login`：登录
-- `/dashboard`：用户仪表盘
-- `/request-help`：发布求助
-- `/marketplace`：任务市场
-- `/volunteer`：志愿专区
-- `/nearby`：附近用户（需个人资料有经纬度）
-- `/ngos`：公益组织列表
-- `/my-offers`：我的帮助提议
-- `/settings/profile`：编辑个人资料
-- `/admin`：管理后台（管理员）
-- `/blockchain/blocks`：内部区块浏览
-- `/web3`：Web3 连接状态
+### 第一部分：用户与认证（2 分钟）
 
-### 典型使用流程
+1. 打开首页，展示注册页面
+2. 用 `alice / test123` 登录，展示仪表盘（4 标签页 + 快捷操作）
+3. 查看个人资料页（信誉分 + 评价 + 上链按钮）
 
-1. 普通用户注册并登录  
-2. 在“个人资料”补充经纬度和技能  
-3. 发布一条求助（或去市场中给他人提议）  
-4. 求助方接受提议并完成任务  
-5. 双方提交评价，信誉分自动更新  
-6. 管理员在后台处理审核与治理
+### 第二部分：任务全流程（5 分钟）
 
-### 区块观察（内部审计链）
+4. 用 alice 发布一条新求助（展示表单字段）
+5. 退出，用 `bob / test123` 登录
+6. 在帮助市场找到 alice 的求助，提交帮助提议
+7. 退出，重新用 alice 登录
+8. 在求助详情页接受 bob 的提议（展示其他提议自动拒绝）
+9. 展示私聊入口，发一条消息给 bob
+10. 标记任务完成
 
-```bat
-python watch_blocks.py --source internal --interval 2
-```
+### 第三部分：支付与评价（3 分钟）
 
-`run_block1.bat` 会执行同类观察流程。
+11. 用 bob 登录，在任务详情页提交收款地址
+12. 用 alice 登录，上传交易哈希（展示支付三阶段 UI）
+13. 双方互评（展示对数衰减信誉公式效果）
 
-### SQLite 增量迁移
+### 第四部分：区块链审计（2 分钟）
 
-```bat
-python scripts\migrate_sqlite.py
-```
+14. 访问 `/blockchain/blocks`，展示区块列表
+15. 点进区块详情，查看 Statement 记录
+16. 展示信誉快照上链功能
 
-## 开发指南
+### 第五部分：管理后台（2 分钟）
 
-### 本地开发建议
+17. 用 `admin / admin123` 登录
+18. 展示管理仪表盘统计
+19. 展示用户管理（拉黑/解黑）
+20. 展示审核中心（举报处理 + NGO 认证）
 
-- 使用应用工厂：`from app import create_app`
-- 变更模型后：
-  - 开发阶段可重建数据库，或
-  - 使用 `scripts/migrate_sqlite.py` 做增量列迁移
-- 管理员初始化：
+### 第六部分：其他亮点（1 分钟）
 
-```bat
-python create_admin.py
-```
-
-默认管理员（脚本生成）：
-
-- 用户名：`admin`
-- 邮箱：`admin@dailyhelper.com`
-- 密码：`admin123`（首次登录后请立即修改）
-
-### 代码组织约定
-
-- 路由与业务：`app.py`
-- 数据结构：`models.py`
-- 输入校验：`forms.py`
-- 链接服务：`blockchain_service.py`、`web3_service.py`
-- 页面模板：`templates/` 按模块拆分
-
-### 质量校验现状
-
-当前仓库未提供统一的自动化测试、lint、typecheck 命令配置（未发现 `pytest`/`ruff`/`mypy`/`tox` 等项目级配置）。  
-建议后续补充：
-
-- 单元测试（pytest）
-- 静态检查（ruff/flake8）
-- 类型检查（mypy/pyright）
-
-## 贡献规范
-
-欢迎贡献代码与改进建议，建议遵循以下流程：
-
-1. Fork 并新建功能分支（`feat/*`、`fix/*`）
-2. 保持提交粒度清晰，提交信息说明“改动内容 + 原因”
-3. 涉及模型/路由/模板改动时同步更新本文档
-4. 提交 PR 时附上：
-   - 变更摘要
-   - 关键截图（如涉及页面）
-   - 影响范围与回归点
+21. 搜索功能、排行榜、志愿专区、附近的人（可快速翻页展示）
 
 ## 常见问题
 
 ### 登录/注册时报错：`Install 'email_validator' for email validation support`
 
-原因：WTForms 的 `Email()` 校验器依赖 `email_validator`。  
-解决：
-
 ```bat
 pip install email-validator
 ```
 
-或执行：
-
-```bat
-pip install -r requirements.app.txt
-```
+或执行 `pip install -r requirements.app.txt`。
 
 ### 附近的人页面没有结果
 
-- 确认当前用户已在个人资料填写 `latitude`/`longitude`
+- 确认当前用户已在个人资料填写经纬度
 - 确认筛选半径、最低信誉分与技能关键词是否过严
+
+### 如何重置数据库
+
+```bat
+del instance\app.db
+python create_admin.py
+python seed_demo_data.py
+python app.py
+```
 
 ## 许可证
 
-本项目采用仓库中的 `LICENSE` 文件约定。  
-如需商用或二次分发，请先确认许可证条款。
+本项目采用仓库中的 `LICENSE` 文件约定。

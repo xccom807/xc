@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 import hashlib
 import json
+import math
 from flask import Flask, render_template, redirect, url_for, flash, abort, request, jsonify
 from flask_login import (
     AnonymousUserMixin,
@@ -117,7 +118,51 @@ def create_app() -> Flask:
     @app.route("/")
     @login_required
     def index():
-        return render_template("index.html")
+        from models import HelpRequest, HelpOffer, User
+        from sqlalchemy import func
+
+        # Platform stats
+        total_users = db.session.query(func.count(User.id)).scalar()
+        total_requests = db.session.query(func.count(HelpRequest.id)).scalar()
+        completed_requests = db.session.query(func.count(HelpRequest.id)).filter(
+            HelpRequest.status == "completed"
+        ).scalar()
+        total_helpers = (
+            db.session.query(func.count(func.distinct(HelpOffer.helper_id)))
+            .filter(HelpOffer.status.in_(["accepted", "completed"]))
+            .scalar()
+        )
+
+        # Latest open requests
+        latest_requests = (
+            HelpRequest.query.filter_by(status="open")
+            .order_by(HelpRequest.created_at.desc())
+            .limit(6)
+            .all()
+        )
+
+        # Top helpers
+        top_helpers = (
+            db.session.query(User, func.count(HelpOffer.id).label("cnt"))
+            .join(HelpOffer, HelpOffer.helper_id == User.id)
+            .filter(HelpOffer.status == "completed")
+            .group_by(User.id)
+            .order_by(func.count(HelpOffer.id).desc())
+            .limit(5)
+            .all()
+        )
+
+        return render_template(
+            "index.html",
+            stats={
+                "users": total_users,
+                "requests": total_requests,
+                "completed": completed_requests,
+                "helpers": total_helpers,
+            },
+            latest_requests=latest_requests,
+            top_helpers=top_helpers,
+        )
 
     @app.route("/about")
     def about():
@@ -565,16 +610,19 @@ def create_app() -> Flask:
     @login_required
     def notifications():
         from models import Notification
-        items = (
+        page = int(request.args.get("page", 1) or 1)
+        per_page = 15
+        pagination = (
             Notification.query.filter_by(user_id=current_user.id)
             .order_by(Notification.created_at.desc())
-            .limit(50)
-            .all()
+            .paginate(page=page, per_page=per_page, error_out=False)
         )
-        # Mark all as read
-        Notification.query.filter_by(user_id=current_user.id, is_read=False).update({"is_read": True})
-        db.session.commit()
-        return render_template("notifications.html", items=items)
+        # Mark current page items as read
+        unread_ids = [n.id for n in pagination.items if not n.is_read]
+        if unread_ids:
+            Notification.query.filter(Notification.id.in_(unread_ids)).update({"is_read": True}, synchronize_session=False)
+            db.session.commit()
+        return render_template("notifications.html", items=pagination.items, pagination=pagination)
 
     @app.context_processor
     def inject_unread_count():
@@ -588,7 +636,7 @@ def create_app() -> Flask:
     @app.route("/dashboard")
     @login_required
     def dashboard():
-        from models import HelpRequest, HelpOffer, Statement
+        from models import HelpRequest, HelpOffer, Review, Statement
 
         # Stats for the current user
         total_requests = HelpRequest.query.filter_by(user_id=current_user.id).count()
@@ -606,7 +654,7 @@ def create_app() -> Flask:
             HelpRequest.status.in_(["open", "in_progress"]),
         ).count()
 
-        # Recent activity: last 5 combined items from requests/offers
+        # Recent activity: merge requests & offers, sort by time desc
         recent_requests = (
             HelpRequest.query.filter_by(user_id=current_user.id)
             .order_by(HelpRequest.created_at.desc())
@@ -619,6 +667,14 @@ def create_app() -> Flask:
             .limit(5)
             .all()
         )
+        recent_activity = []
+        for r in recent_requests:
+            recent_activity.append({"type": "request", "item": r, "time": r.created_at})
+        for o in recent_offers:
+            recent_activity.append({"type": "offer", "item": o, "time": o.created_at})
+        recent_activity.sort(key=lambda x: x["time"], reverse=True)
+        recent_activity = recent_activity[:8]
+
         my_requests = (
             HelpRequest.query.filter_by(user_id=current_user.id)
             .order_by(HelpRequest.created_at.desc())
@@ -631,6 +687,15 @@ def create_app() -> Flask:
             .limit(20)
             .all()
         )
+
+        # Reviews received by current user
+        received_reviews = (
+            Review.query.filter_by(reviewee_id=current_user.id)
+            .order_by(Review.created_at.desc())
+            .limit(10)
+            .all()
+        )
+
         latest_reputation_anchor = (
             Statement.query.filter_by(user_id=current_user.id, kind="reputation_snapshot_anchored")
             .order_by(Statement.created_at.desc())
@@ -648,12 +713,10 @@ def create_app() -> Flask:
                 "helps_completed": helps_completed,
                 "success_rate": success_rate,
             },
-            recent={
-                "requests": recent_requests,
-                "offers": recent_offers,
-            },
+            recent_activity=recent_activity,
             my_requests=my_requests,
             my_offers=my_offers,
+            received_reviews=received_reviews,
             latest_reputation_anchor=latest_reputation_anchor,
         )
 
@@ -1419,6 +1482,10 @@ def create_app() -> Flask:
             flash("您的账号已被列入黑名单，无法提供帮助。", "error")
             return redirect(url_for("request_detail", request_id=req.id))
         if offer_form.submit.data and offer_form.validate_on_submit():
+            existing_offer = HelpOffer.query.filter_by(request_id=req.id, helper_id=current_user.id).first()
+            if existing_offer:
+                flash("您已对该求助提交过帮助申请，无法重复提交。", "error")
+                return redirect(url_for("request_detail", request_id=req.id))
             msg = offer_form.message.data
             if offer_form.availability.data:
                 msg += "\n\n可用性: 可以立即开始。"
@@ -1608,16 +1675,37 @@ def create_app() -> Flask:
             )
             db.session.add(rv)
 
-            # Simple reputation update for the reviewee
+            # Logarithmic reputation update for the reviewee
             reviewee = User.query.get(reviewee_id)
             delta = 0
             if reviewee is not None:
-                delta = rating * 3
-                if rating == 5:
-                    delta += 2
-                if rating <= 2:
-                    delta -= 5
-                new_score = max(0.0, min(100.0, float(reviewee.reputation_score or 0.0) + delta))
+                current_score = float(reviewee.reputation_score or 0.0)
+
+                # 1) Base points from star rating
+                base_points_map = {5: 5, 4: 3, 3: 1, 2: -2, 1: -4}
+                base_points = base_points_map.get(rating, 0)
+
+                # 2) Comment length bonus (encourages detailed reviews)
+                comment_len = len(comment)
+                if comment_len >= 200:
+                    comment_bonus = 1.8
+                elif comment_len >= 50:
+                    comment_bonus = 1.5
+                elif comment_len >= 10:
+                    comment_bonus = 1.2
+                else:
+                    comment_bonus = 1.0
+
+                # 3) Logarithmic diminishing factor: higher score → smaller gain
+                #    Only applied to positive deltas; penalties always apply in full
+                if base_points > 0:
+                    diminishing = 1.0 / math.log2(current_score + 2)
+                    delta = base_points * diminishing * comment_bonus
+                else:
+                    delta = base_points * comment_bonus
+
+                delta = round(delta, 2)
+                new_score = max(0.0, min(100.0, current_score + delta))
                 reviewee.reputation_score = new_score
 
             # Blockchain log: review submission
@@ -1691,19 +1779,14 @@ def create_app() -> Flask:
                 can_review = already is None
 
         # Payment info for completed paid tasks
-        helper_wallet_address = None
-        requester_wallet_linked = False
-        payment_needed = False
+        payment = None
+        is_helper = False
         if req.status == "completed" and req.price and not req.is_volunteer:
+            from models import Payment
+            payment = Payment.query.filter_by(request_id=req.id).first()
             completed_offer = HelpOffer.query.filter_by(request_id=req.id, status="completed").first()
             if completed_offer:
-                from models import WalletLink
-                helper_wl = WalletLink.query.filter_by(user_id=completed_offer.helper_id).one_or_none()
-                if helper_wl and helper_wl.verified_at:
-                    helper_wallet_address = helper_wl.address
-                requester_wl = WalletLink.query.filter_by(user_id=req.user_id).one_or_none()
-                requester_wallet_linked = bool(requester_wl and requester_wl.verified_at)
-                payment_needed = is_requester
+                is_helper = current_user.id == completed_offer.helper_id
 
         return render_template(
             "features/request_detail.html",
@@ -1719,50 +1802,154 @@ def create_app() -> Flask:
             my_offer=my_offer,
             request_reviews=request_reviews,
             can_review=can_review,
-            helper_wallet_address=helper_wallet_address,
-            requester_wallet_linked=requester_wallet_linked,
-            payment_needed=payment_needed,
+            payment=payment,
+            is_helper=is_helper,
         )
 
-    @app.route("/api/record-payment", methods=["POST"])
-    @csrf.exempt
+    @app.route("/api/submit-payment-address", methods=["POST"])
     @login_required
-    def record_payment():
-        from models import HelpRequest, HelpOffer
-        payload = request.get_json(silent=True) or {}
-        request_id = payload.get("request_id")
-        tx_hash = payload.get("tx_hash", "").strip()
-        if not request_id or not tx_hash:
-            return jsonify({"ok": False, "error": "Missing request_id or tx_hash"}), 400
+    def submit_payment_address():
+        """Helper submits their receiving address after task completion."""
+        from models import HelpRequest, HelpOffer, Payment
 
-        req_obj = HelpRequest.query.get(request_id)
-        if not req_obj or req_obj.user_id != current_user.id:
-            return jsonify({"ok": False, "error": "Unauthorized"}), 403
+        request_id = request.form.get("request_id", type=int)
+        helper_address = (request.form.get("helper_address") or "").strip()
+
+        if not request_id or not helper_address:
+            flash("请填写收款地址。", "error")
+            return redirect(url_for("request_detail", request_id=request_id or 0))
+
+        # Validate Ethereum address format
+        if not Web3.is_address(helper_address):
+            flash("无效的以太坊地址格式，请检查后重新提交。", "error")
+            return redirect(url_for("request_detail", request_id=request_id))
+
+        helper_address = Web3.to_checksum_address(helper_address)
+
+        req_obj = HelpRequest.query.get_or_404(request_id)
         if req_obj.status != "completed":
-            return jsonify({"ok": False, "error": "Task not completed"}), 400
+            flash("任务尚未完成，无法提交收款地址。", "error")
+            return redirect(url_for("request_detail", request_id=request_id))
 
+        # Verify current user is the helper
         completed_offer = HelpOffer.query.filter_by(request_id=req_obj.id, status="completed").first()
-        if not completed_offer:
-            return jsonify({"ok": False, "error": "No completed offer found"}), 400
+        if not completed_offer or completed_offer.helper_id != current_user.id:
+            flash("只有该任务的帮助者才能提交收款地址。", "error")
+            return redirect(url_for("request_detail", request_id=request_id))
 
+        # Prevent duplicate submission
+        existing = Payment.query.filter_by(request_id=req_obj.id).first()
+        if existing:
+            flash("收款地址已提交过，无需重复操作。", "error")
+            return redirect(url_for("request_detail", request_id=request_id))
+
+        payment = Payment(
+            request_id=req_obj.id,
+            helper_id=current_user.id,
+            requester_id=req_obj.user_id,
+            helper_address=helper_address,
+            amount=req_obj.price,
+            status="address_submitted",
+        )
+        db.session.add(payment)
+        db.session.commit()
+
+        # Blockchain log
         try:
             append_statement(
-                kind="payment_sent",
+                kind="payment_address_submitted",
                 payload={
                     "request_id": req_obj.id,
-                    "helper_id": completed_offer.helper_id,
-                    "requester_id": current_user.id,
-                    "tx_hash": tx_hash,
+                    "helper_id": current_user.id,
+                    "helper_address": helper_address,
                     "amount": req_obj.price,
                 },
                 user_id=current_user.id,
             )
             maybe_seal_block()
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
+        # Notify requester
+        _notify(
+            req_obj.user_id,
+            "payment_address_submitted",
+            f"帮助者已提交收款地址，请前往「{req_obj.title[:40]}」进行转账支付。",
+            url_for("request_detail", request_id=req_obj.id),
+        )
         db.session.commit()
-        return jsonify({"ok": True, "tx_hash": tx_hash})
+
+        flash("收款地址已提交，等待求助者转账。", "success")
+        return redirect(url_for("request_detail", request_id=request_id))
+
+    @app.route("/api/record-payment", methods=["POST"])
+    @login_required
+    def record_payment():
+        """Requester uploads tx_hash as proof of payment."""
+        from models import HelpRequest, HelpOffer, Payment
+
+        request_id = request.form.get("request_id", type=int)
+        tx_hash = (request.form.get("tx_hash") or "").strip()
+
+        if not request_id or not tx_hash:
+            flash("请填写交易哈希。", "error")
+            return redirect(url_for("request_detail", request_id=request_id or 0))
+
+        # Basic tx_hash format check (0x + 64 hex chars)
+        if not (tx_hash.startswith("0x") and len(tx_hash) == 66):
+            flash("交易哈希格式不正确，应为 0x 开头的66位十六进制字符串。", "error")
+            return redirect(url_for("request_detail", request_id=request_id))
+
+        req_obj = HelpRequest.query.get_or_404(request_id)
+        if req_obj.user_id != current_user.id:
+            flash("只有求助者本人才能上传支付凭证。", "error")
+            return redirect(url_for("request_detail", request_id=request_id))
+        if req_obj.status != "completed":
+            flash("任务尚未完成。", "error")
+            return redirect(url_for("request_detail", request_id=request_id))
+
+        payment = Payment.query.filter_by(request_id=req_obj.id).first()
+        if not payment:
+            flash("帮助者尚未提交收款地址，无法上传支付凭证。", "error")
+            return redirect(url_for("request_detail", request_id=request_id))
+        if payment.status == "paid":
+            flash("该任务已完成支付，无需重复操作。", "error")
+            return redirect(url_for("request_detail", request_id=request_id))
+
+        payment.tx_hash = tx_hash
+        payment.status = "paid"
+        payment.paid_at = datetime.utcnow()
+        db.session.commit()
+
+        # Blockchain log
+        try:
+            append_statement(
+                kind="payment_proof_uploaded",
+                payload={
+                    "request_id": req_obj.id,
+                    "helper_id": payment.helper_id,
+                    "requester_id": current_user.id,
+                    "tx_hash": tx_hash,
+                    "amount": payment.amount,
+                    "helper_address": payment.helper_address,
+                },
+                user_id=current_user.id,
+            )
+            maybe_seal_block()
+        except Exception:  # noqa: BLE001
+            pass
+
+        # Notify helper
+        _notify(
+            payment.helper_id,
+            "payment_completed",
+            f"求助者已完成转账并上传凭证，请前往「{req_obj.title[:40]}」查看。",
+            url_for("request_detail", request_id=req_obj.id),
+        )
+        db.session.commit()
+
+        flash("支付凭证已上传成功！", "success")
+        return redirect(url_for("request_detail", request_id=request_id))
 
     @app.route("/my-offers")
     @login_required

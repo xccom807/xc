@@ -14,8 +14,6 @@
         <a href="#profile" class="subnav-item">我的资料</a>
         <a href="#requests" class="subnav-item">我的求助</a>
         <a href="#offers" class="subnav-item">我的帮助</a>
-        <a href="#reviews" class="subnav-item">我的评价</a>
-        <a href="#reputation" class="subnav-item">信誉评分</a>
       </div>
     </nav>
 
@@ -30,67 +28,85 @@
         "rejected": "已拒绝"
       } %}
 
+      {# ═══ Tab 1: 仪表盘概览 ═══ #}
       <div id="main-dashboard" class="dashboard-section active">
         <div class="stats-horizontal">
           <div class="stat-card">
-            <div class="stat-icon">
-              <i class="fa-solid fa-clipboard-list"></i>
-            </div>
+            <div class="stat-icon"><i class="fa-solid fa-clipboard-list"></i></div>
             <h4>累计发布求助</h4>
             <div class="value">{{ stats.total_requests }}</div>
           </div>
           <div class="stat-card">
-            <div class="stat-icon">
-              <i class="fa-solid fa-hand-holding-heart"></i>
-            </div>
+            <div class="stat-icon"><i class="fa-solid fa-hand-holding-heart"></i></div>
             <h4>累计提供帮助</h4>
             <div class="value">{{ stats.total_offers }}</div>
           </div>
           <div class="stat-card">
-            <div class="stat-icon">
-              <i class="fa-solid fa-star"></i>
-            </div>
+            <div class="stat-icon"><i class="fa-solid fa-star"></i></div>
             <h4>当前信誉评分</h4>
             <div class="value">{{ "%.1f"|format(stats.reputation) }}</div>
           </div>
           <div class="stat-card">
-            <div class="stat-icon">
-              <i class="fa-solid fa-clock"></i>
-            </div>
+            <div class="stat-icon"><i class="fa-solid fa-clock"></i></div>
             <h4>待处理任务</h4>
             <div class="value">{{ stats.pending_tasks }}</div>
           </div>
         </div>
 
+        {# 快捷操作中心 #}
+        <div class="section">
+          <h3>快捷操作</h3>
+          <div class="stats-horizontal" style="margin-top:.75rem;">
+            <a href="{{ url_for('request_help') }}" class="stat-card" style="text-decoration:none;color:inherit;cursor:pointer;transition:transform .15s;">
+              <div class="stat-icon" style="color:var(--accent-color);"><i class="fa-solid fa-plus-circle fa-lg"></i></div>
+              <h4>发布求助</h4>
+              <p class="muted" style="font-size:.85rem;margin:0;">发布新的求助请求</p>
+            </a>
+            <a href="#requests" class="stat-card subnav-shortcut" style="text-decoration:none;color:inherit;cursor:pointer;transition:transform .15s;">
+              <div class="stat-icon" style="color:#f59e0b;"><i class="fa-solid fa-clipboard-list fa-lg"></i></div>
+              <h4>查看我的求助</h4>
+              <p class="muted" style="font-size:.85rem;margin:0;">查看已发布的求助及状态</p>
+            </a>
+            <a href="{{ url_for('marketplace') }}" class="stat-card" style="text-decoration:none;color:inherit;cursor:pointer;transition:transform .15s;">
+              <div class="stat-icon" style="color:#10b981;"><i class="fa-solid fa-hand-holding-heart fa-lg"></i></div>
+              <h4>去帮助别人</h4>
+              <p class="muted" style="font-size:.85rem;margin:0;">浏览市场寻找需要帮助的人</p>
+            </a>
+            <a href="#offers" class="stat-card subnav-shortcut" style="text-decoration:none;color:inherit;cursor:pointer;transition:transform .15s;">
+              <div class="stat-icon" style="color:#8b5cf6;"><i class="fa-solid fa-list-check fa-lg"></i></div>
+              <h4>查看我的帮助</h4>
+              <p class="muted" style="font-size:.85rem;margin:0;">查看已提交的帮助记录</p>
+            </a>
+          </div>
+        </div>
+
+        {# 最近动态 — 按时间合并排序 #}
         <div class="section" id="recent">
           <h3>最近动态</h3>
-          {% if recent.requests or recent.offers %}
+          {% if recent_activity %}
             <ul class="dashboard-list">
-              {% for r in recent.requests %}
+              {% for entry in recent_activity %}
                 <li>
-                  <strong>求助：</strong>
-                  <a href="{{ url_for("request_detail", request_id=r.id) }}">{{ r.title }}</a>
-                  - {{ status_labels.get(r.status, r.status) }}
-                </li>
-              {% endfor %}
-              {% for o in recent.offers %}
-                <li>
-                  <strong>帮助：</strong>
-                  <a href="{{ url_for("request_detail", request_id=o.request_id) }}">查看对应求助 #{{ o.request_id }}</a>
-                  - {{ status_labels.get(o.status, o.status) }}
+                  {% if entry.type == "request" %}
+                    <strong>求助：</strong>
+                    <a href="{{ url_for('request_detail', request_id=entry.item.id) }}">{{ entry.item.title }}</a>
+                    - {{ status_labels.get(entry.item.status, entry.item.status) }}
+                  {% else %}
+                    <strong>帮助：</strong>
+                    <a href="{{ url_for('request_detail', request_id=entry.item.request_id) }}">{{ entry.item.request.title if entry.item.request else ('求助 #' ~ entry.item.request_id) }}</a>
+                    - {{ status_labels.get(entry.item.status, entry.item.status) }}
+                  {% endif %}
+                  <span class="muted" style="font-size:.85rem;margin-left:.5rem;">{{ entry.time.strftime("%m-%d %H:%M") }}</span>
                 </li>
               {% endfor %}
             </ul>
           {% else %}
             <p class="muted">暂无最近动态。</p>
           {% endif %}
-          <div class="dashboard-actions">
-            <a class="btn" href="{{ url_for("request_help") }}">发布求助</a>
-            <a class="btn secondary" href="{{ url_for("marketplace") }}">去帮助别人</a>
-          </div>
         </div>
       </div>
 
+      {# ═══ Tab 2: 我的资料（含评价 + 信誉） ═══ #}
       <div id="profile" class="dashboard-section">
         <div class="section">
           <h3>我的资料</h3>
@@ -105,69 +121,11 @@
           <p><strong>所在地：</strong> {{ current_user.location or "未设置" }}</p>
           <p><strong>加入时间：</strong> {{ current_user.created_at.strftime("%Y年%m月") }}</p>
           <div class="actions">
-            <a class="btn" href="{{ url_for("profile_edit") }}">编辑资料</a>
+            <a class="btn" href="{{ url_for('profile_edit') }}">编辑资料</a>
           </div>
         </div>
-      </div>
 
-      <div id="requests" class="dashboard-section">
-        <div class="section">
-          <h3>我的求助</h3>
-          {% if my_requests %}
-            <ul class="dashboard-list">
-              {% for r in my_requests %}
-                <li>
-                  <strong><a href="{{ url_for("request_detail", request_id=r.id) }}">{{ r.title }}</a></strong>
-                  - {{ status_labels.get(r.status, r.status) }}
-                  - {{ r.created_at.strftime("%Y-%m-%d") }}
-                </li>
-              {% endfor %}
-            </ul>
-          {% else %}
-            <p>暂未发布任何求助。</p>
-          {% endif %}
-          <div class="dashboard-actions">
-            <a class="btn" href="{{ url_for("request_help") }}">发布新求助</a>
-            <a class="btn secondary" href="{{ url_for("marketplace") }}">去市场查看求助</a>
-          </div>
-        </div>
-      </div>
-
-      <div id="offers" class="dashboard-section">
-        <div class="section">
-          <h3>我的帮助</h3>
-          {% if my_offers %}
-            <ul class="dashboard-list">
-              {% for o in my_offers %}
-                <li>
-                  <strong><a href="{{ url_for("request_detail", request_id=o.request_id) }}">对应求助 #{{ o.request_id }}</a></strong>
-                  - {{ status_labels.get(o.status, o.status) }}
-                  - {{ o.created_at.strftime("%Y-%m-%d") }}
-                </li>
-              {% endfor %}
-            </ul>
-          {% else %}
-            <p>暂未提供任何帮助。</p>
-          {% endif %}
-          <div class="dashboard-actions">
-            <a class="btn" href="{{ url_for("marketplace") }}">去帮助别人</a>
-            <a class="btn secondary" href="{{ url_for("my_offers") }}">查看我的帮助记录</a>
-          </div>
-        </div>
-      </div>
-
-      <div id="reviews" class="dashboard-section">
-        <div class="section">
-          <h3>我的评价</h3>
-          <p>可在已完成任务详情页提交评价并查看历史评价。</p>
-          <div class="dashboard-actions">
-            <a class="btn" href="{{ url_for("my_offers") }}">查看任务状态</a>
-          </div>
-        </div>
-      </div>
-
-      <div id="reputation" class="dashboard-section">
-        <div class="section">
+        <div class="section" style="margin-top:1.5rem;">
           <h3>信誉评分</h3>
           <div class="reputation-display">
             <div class="score-large">{{ "%.1f"|format(stats.reputation) }}/100</div>
@@ -190,6 +148,75 @@
             </p>
           {% endif %}
         </div>
+
+        <div class="section" style="margin-top:1.5rem;">
+          <h3>收到的评价</h3>
+          {% if received_reviews %}
+            <div style="display:flex;flex-direction:column;gap:.75rem;">
+              {% for rv in received_reviews %}
+                <div style="background:var(--panel-color);border:1px solid var(--border-color);border-radius:var(--border-radius);padding:1rem;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <strong>{{ rv.reviewer.full_name or rv.reviewer.username }}</strong>
+                    <span class="muted" style="font-size:.85rem;">{{ rv.created_at.strftime("%Y-%m-%d %H:%M") }}</span>
+                  </div>
+                  <div style="margin:.25rem 0;">
+                    {% for i in range(0, rv.rating) %}<i class="fa-solid fa-star" style="color:#f59e0b;"></i>{% endfor %}
+                    {% for i in range(rv.rating, 5) %}<i class="fa-regular fa-star" style="color:#d1d5db;"></i>{% endfor %}
+                  </div>
+                  {% if rv.comment %}<p class="muted" style="margin:.25rem 0 0;">{{ rv.comment }}</p>{% endif %}
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p class="muted">暂无收到的评价。</p>
+          {% endif %}
+        </div>
+      </div>
+
+      {# ═══ Tab 3: 我的求助 ═══ #}
+      <div id="requests" class="dashboard-section">
+        <div class="section">
+          <h3>我的求助</h3>
+          {% if my_requests %}
+            <ul class="dashboard-list">
+              {% for r in my_requests %}
+                <li>
+                  <strong><a href="{{ url_for('request_detail', request_id=r.id) }}">{{ r.title }}</a></strong>
+                  - {{ status_labels.get(r.status, r.status) }}
+                  - {{ r.created_at.strftime("%Y-%m-%d") }}
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="muted">暂未发布任何求助。</p>
+          {% endif %}
+          <div class="dashboard-actions">
+            <a class="btn" href="{{ url_for('request_help') }}">发布新求助</a>
+          </div>
+        </div>
+      </div>
+
+      {# ═══ Tab 4: 我的帮助 ═══ #}
+      <div id="offers" class="dashboard-section">
+        <div class="section">
+          <h3>我的帮助</h3>
+          {% if my_offers %}
+            <ul class="dashboard-list">
+              {% for o in my_offers %}
+                <li>
+                  <strong><a href="{{ url_for('request_detail', request_id=o.request_id) }}">{{ o.request.title if o.request else ('求助 #' ~ o.request_id) }}</a></strong>
+                  - {{ status_labels.get(o.status, o.status) }}
+                  - {{ o.created_at.strftime("%Y-%m-%d") }}
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="muted">暂未提供任何帮助。</p>
+          {% endif %}
+          <div class="dashboard-actions">
+            <a class="btn" href="{{ url_for('marketplace') }}">去帮助别人</a>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -199,19 +226,29 @@
       const subnavItems = document.querySelectorAll(".subnav-item");
       const dashboardSections = document.querySelectorAll(".dashboard-section");
 
+      function switchTab(targetId) {
+        subnavItems.forEach(nav => nav.classList.remove("active"));
+        dashboardSections.forEach(section => section.classList.remove("active"));
+        const targetNav = document.querySelector('.subnav-item[href="#' + targetId + '"]');
+        const targetSection = document.getElementById(targetId);
+        if (targetNav) targetNav.classList.add("active");
+        if (targetSection) targetSection.classList.add("active");
+      }
+
       subnavItems.forEach(item => {
         item.addEventListener("click", function(e) {
           e.preventDefault();
           const targetId = this.getAttribute("href").substring(1);
+          switchTab(targetId);
+        });
+      });
 
-          subnavItems.forEach(nav => nav.classList.remove("active"));
-          this.classList.add("active");
-
-          dashboardSections.forEach(section => section.classList.remove("active"));
-          const targetSection = document.getElementById(targetId);
-          if (targetSection) {
-            targetSection.classList.add("active");
-          }
+      // Quick-action cards that link to dashboard tabs
+      document.querySelectorAll(".subnav-shortcut").forEach(card => {
+        card.addEventListener("click", function(e) {
+          e.preventDefault();
+          const targetId = this.getAttribute("href").substring(1);
+          switchTab(targetId);
         });
       });
 

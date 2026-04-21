@@ -231,6 +231,28 @@ class NGO(db.Model):
         return f"<NGO {self.name} ({self.category})>"
 
 
+class Payment(db.Model):
+    __tablename__ = "payments"
+
+    id = db.Column(db.Integer, primary_key=True)
+    request_id = db.Column(db.Integer, db.ForeignKey("help_requests.id"), nullable=False, index=True)
+    helper_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    requester_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    helper_address = db.Column(db.String(42), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    tx_hash = db.Column(db.String(66), nullable=True)
+    status = db.Column(db.String(20), nullable=False, default="address_submitted")  # address_submitted / paid
+    address_submitted_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    paid_at = db.Column(db.DateTime, nullable=True)
+
+    help_request = db.relationship("HelpRequest", backref=db.backref("payment", uselist=False))
+    helper = db.relationship("User", foreign_keys=[helper_id])
+    requester = db.relationship("User", foreign_keys=[requester_id])
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<Payment req={self.request_id} status={self.status}>"
+
+
 class Message(db.Model):
     __tablename__ = "messages"
 

@@ -1,46 +1,159 @@
 {% extends 'base.html' %}
 {% block content %}
-  <section class="hero">
-    <h2>社区协作任务互助平台</h2>
-    <p class="muted">连接你周围的人，获得任务帮助，提供技能，参与志愿服务，或发现推动社会影响的公益组织。</p>
-  </section>
 
-  <section class="cards">
-    <div class="cards-container">
-      <a class="card-link" href="{{ url_for('request_help') }}">
-        <div class="card feature">
-          <h3><i class="fa-solid fa-hand-holding-hand"></i> 发布求助</h3>
-          <p>发布任务并获得附近社区成员的帮助。</p>
-        </div>
-      </a>
-      <a class="card-link" href="{{ url_for('offer_help') }}">
-        <div class="card feature">
-          <h3><i class="fa-solid fa-person-rays"></i> 提供帮助</h3>
-          <p>贡献你的技能和时间，帮助他人实现目标。</p>
-        </div>
-      </a>
-      <a class="card-link" href="{{ url_for('volunteer') }}">
-        <div class="card feature">
-          <h3><i class="fa-solid fa-handshake-angle"></i> 志愿服务机会</h3>
-          <p>寻找有意义的无偿机会服务社区。</p>
-        </div>
-      </a>
-      <a class="card-link" href="{{ url_for('ngos') }}">
-        <div class="card feature">
-          <h3><i class="fa-solid fa-ribbon"></i> 公益组织与社会议题</h3>
-          <p>探索你可以支持或合作的公益组织和慈善项目。</p>
-        </div>
-      </a>
-    </div>
-  </section>
+{# ── Hero ── #}
+<section style="text-align:center;padding:3rem 0 2rem;">
+  <h2 style="font-size:2rem;font-weight:800;margin-bottom:0.6rem;background:linear-gradient(135deg,var(--fg-bright),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">
+    每日互助 — 社区协作任务互助平台
+  </h2>
+  <p style="color:var(--text-muted);max-width:620px;margin:0 auto 1.5rem;font-size:1.05rem;line-height:1.6;">
+    连接你周围的人，发布求助或提供技能，通过区块链确保每一笔交易和评价真实可追溯。
+  </p>
+  <div style="display:flex;gap:0.8rem;justify-content:center;flex-wrap:wrap;">
+    <a href="{{ url_for('request_help') }}" class="btn" style="padding:0.7rem 1.6rem;font-size:0.95rem;">
+      <i class="fa-solid fa-plus"></i> 发布求助
+    </a>
+    <a href="{{ url_for('marketplace') }}" class="btn" style="padding:0.7rem 1.6rem;font-size:0.95rem;background:transparent;border:1px solid var(--accent);color:var(--accent);">
+      <i class="fa-solid fa-store"></i> 浏览市场
+    </a>
+  </div>
+</section>
 
-  <section class="nearby">
-    <div>
-      <h3>查看附近的人</h3>
-      <p class="muted">发现你周围的帮助者和求助者。</p>
+{# ── Platform Stats ── #}
+<section style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:2.5rem;">
+  {% set stat_items = [
+    ('fa-solid fa-users', '注册用户', stats.users, '#3b82f6'),
+    ('fa-solid fa-clipboard-list', '求助总数', stats.requests, '#f59e0b'),
+    ('fa-solid fa-circle-check', '已完成', stats.completed, '#22c55e'),
+    ('fa-solid fa-hand-holding-heart', '活跃帮助者', stats.helpers, '#a855f7'),
+  ] %}
+  {% for icon, label, value, color in stat_items %}
+    <div style="background:var(--panel);border:1px solid var(--border-color);border-radius:var(--radius);padding:1.5rem 1rem;text-align:center;">
+      <i class="{{ icon }}" style="font-size:1.6rem;color:{{ color }};margin-bottom:0.5rem;display:block;"></i>
+      <div style="font-size:1.8rem;font-weight:700;color:var(--fg-bright);">{{ value }}</div>
+      <div style="font-size:0.85rem;color:var(--text-muted);margin-top:0.2rem;">{{ label }}</div>
     </div>
-    <div class="actions">
-      <a class="btn" href="{{ url_for('nearby') }}"><i class="fa-solid fa-location-crosshairs"></i> 探索附近</a>
+  {% endfor %}
+</section>
+
+{# ── Quick Actions ── #}
+<section style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:2.5rem;">
+  {% set actions = [
+    (url_for('request_help'), 'fa-solid fa-hand-holding-hand', '发布求助', '发布任务并获得社区帮助', 'linear-gradient(135deg,#3b82f6,#2563eb)'),
+    (url_for('offer_help'), 'fa-solid fa-person-rays', '提供帮助', '贡献技能和时间帮助他人', 'linear-gradient(135deg,#22c55e,#16a34a)'),
+    (url_for('volunteer'), 'fa-solid fa-handshake-angle', '志愿服务', '参与无偿公益志愿活动', 'linear-gradient(135deg,#f59e0b,#d97706)'),
+    (url_for('ngos'), 'fa-solid fa-ribbon', '公益组织', '发现可支持的公益项目', 'linear-gradient(135deg,#a855f7,#7c3aed)'),
+  ] %}
+  {% for href, icon, title, desc, bg in actions %}
+    <a href="{{ href }}" style="text-decoration:none;color:inherit;display:block;">
+      <div style="background:var(--panel);border:1px solid var(--border-color);border-radius:var(--radius);padding:1.5rem;transition:transform 0.2s,box-shadow 0.2s;cursor:pointer;" onmouseover="this.style.transform='translateY(-4px)';this.style.boxShadow='0 12px 32px rgba(0,0,0,0.2)'" onmouseout="this.style.transform='none';this.style.boxShadow='none'">
+        <div style="width:44px;height:44px;border-radius:12px;background:{{ bg }};display:flex;align-items:center;justify-content:center;margin-bottom:0.8rem;">
+          <i class="{{ icon }}" style="font-size:1.2rem;color:#fff;"></i>
+        </div>
+        <div style="font-weight:600;font-size:1rem;color:var(--fg-bright);margin-bottom:0.3rem;">{{ title }}</div>
+        <div style="font-size:0.85rem;color:var(--text-muted);line-height:1.5;">{{ desc }}</div>
+      </div>
+    </a>
+  {% endfor %}
+</section>
+
+{# ── Latest Open Requests ── #}
+{% if latest_requests %}
+<section style="margin-bottom:2.5rem;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+    <h3 style="font-size:1.2rem;font-weight:700;"><i class="fa-solid fa-fire" style="color:#f59e0b;"></i> 最新求助</h3>
+    <a href="{{ url_for('marketplace') }}" style="font-size:0.85rem;color:var(--accent);text-decoration:none;">查看全部 <i class="fa-solid fa-arrow-right"></i></a>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;">
+    {% for r in latest_requests %}
+      <a href="{{ url_for('request_detail', request_id=r.id) }}" style="text-decoration:none;color:inherit;">
+        <div style="background:var(--panel);border:1px solid var(--border-color);border-radius:var(--radius);padding:1.2rem;transition:border-color 0.2s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border-color)'">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem;">
+            <span style="font-size:0.75rem;padding:0.2rem 0.6rem;border-radius:20px;background:{% if r.is_volunteer %}rgba(34,197,94,0.12);color:#22c55e{% else %}rgba(59,130,246,0.12);color:#3b82f6{% endif %};">
+              {% if r.is_volunteer %}志愿{% else %}{{ '%.0f'|format(r.price) if r.price else '面议' }} ETH{% endif %}
+            </span>
+            <span style="font-size:0.75rem;color:var(--text-muted);">{{ r.created_at.strftime('%m-%d') }}</span>
+          </div>
+          <div style="font-weight:600;font-size:0.95rem;color:var(--fg-bright);margin-bottom:0.4rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ r.title }}</div>
+          <div style="font-size:0.8rem;color:var(--text-muted);display:flex;gap:0.8rem;">
+            {% if r.category %}<span><i class="fa-solid fa-tag"></i> {{ r.category }}</span>{% endif %}
+            {% if r.location %}<span><i class="fa-solid fa-location-dot"></i> {{ r.location }}</span>{% endif %}
+          </div>
+        </div>
+      </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{# ── Bottom: Top Helpers + Nearby ── #}
+<section style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-bottom:3rem;">
+  {# Top Helpers #}
+  <div style="background:var(--panel);border:1px solid var(--border-color);border-radius:var(--radius);padding:1.5rem;">
+    <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:1rem;"><i class="fa-solid fa-trophy" style="color:#f59e0b;"></i> 优秀帮助者</h3>
+    {% if top_helpers %}
+      {% for user, cnt in top_helpers %}
+        <div style="display:flex;align-items:center;gap:0.8rem;padding:0.6rem 0;{% if not loop.last %}border-bottom:1px solid var(--border-color);{% endif %}">
+          <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:0.8rem;">{{ loop.index }}</div>
+          <div style="flex:1;">
+            <a href="{{ url_for('profile_view', username=user.username) }}" style="color:var(--fg-bright);text-decoration:none;font-weight:600;font-size:0.9rem;">{{ user.full_name or user.username }}</a>
+            <div style="font-size:0.78rem;color:var(--text-muted);">
+              <i class="fa-solid fa-star" style="color:#f59e0b;"></i> {{ '%.1f'|format(user.reputation_score) }}
+            </div>
+          </div>
+          <div style="font-size:0.85rem;color:var(--accent);font-weight:600;">{{ cnt }} 次帮助</div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div style="text-align:center;padding:1.5rem;color:var(--text-muted);font-size:0.9rem;">暂无数据</div>
+    {% endif %}
+    <div style="margin-top:0.8rem;text-align:center;">
+      <a href="{{ url_for('leaderboard') }}" style="font-size:0.85rem;color:var(--accent);text-decoration:none;">查看完整排行榜 <i class="fa-solid fa-arrow-right"></i></a>
     </div>
-  </section>
+  </div>
+
+  {# Nearby + More #}
+  <div style="display:flex;flex-direction:column;gap:1rem;">
+    <a href="{{ url_for('nearby') }}" style="text-decoration:none;color:inherit;flex:1;">
+      <div style="background:var(--panel);border:1px solid var(--border-color);border-radius:var(--radius);padding:1.5rem;height:100%;display:flex;flex-direction:column;justify-content:center;transition:border-color 0.2s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border-color)'">
+        <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.6rem;">
+          <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#06b6d4,#0891b2);display:flex;align-items:center;justify-content:center;">
+            <i class="fa-solid fa-location-crosshairs" style="font-size:1.3rem;color:#fff;"></i>
+          </div>
+          <div>
+            <div style="font-weight:700;font-size:1.05rem;color:var(--fg-bright);">附近的人</div>
+            <div style="font-size:0.85rem;color:var(--text-muted);">发现你周围的帮助者和求助者</div>
+          </div>
+        </div>
+      </div>
+    </a>
+    <a href="{{ url_for('search_page') }}" style="text-decoration:none;color:inherit;flex:1;">
+      <div style="background:var(--panel);border:1px solid var(--border-color);border-radius:var(--radius);padding:1.5rem;height:100%;display:flex;flex-direction:column;justify-content:center;transition:border-color 0.2s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border-color)'">
+        <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.6rem;">
+          <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#8b5cf6,#6d28d9);display:flex;align-items:center;justify-content:center;">
+            <i class="fa-solid fa-magnifying-glass" style="font-size:1.3rem;color:#fff;"></i>
+          </div>
+          <div>
+            <div style="font-weight:700;font-size:1.05rem;color:var(--fg-bright);">搜索</div>
+            <div style="font-size:0.85rem;color:var(--text-muted);">搜索求助、用户和技能</div>
+          </div>
+        </div>
+      </div>
+    </a>
+  </div>
+</section>
+
+<style>
+@media (max-width: 900px) {
+  section[style*="grid-template-columns:repeat(4"] { grid-template-columns: repeat(2,1fr) !important; }
+  section[style*="grid-template-columns:repeat(3"] { grid-template-columns: repeat(2,1fr) !important; }
+  section[style*="grid-template-columns:1fr 1fr"] { grid-template-columns: 1fr !important; }
+}
+@media (max-width: 520px) {
+  section[style*="grid-template-columns:repeat(4"] { grid-template-columns: 1fr 1fr !important; }
+  section[style*="grid-template-columns:repeat(3"] { grid-template-columns: 1fr !important; }
+  section[style*="grid-template-columns:repeat(2"] { grid-template-columns: 1fr !important; }
+}
+</style>
+
 {% endblock %}
