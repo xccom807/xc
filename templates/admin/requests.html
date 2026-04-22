@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+{% block content %}
+  {% set status_labels = {"open": "待匹配", "in_progress": "进行中", "completed": "已完成", "cancelled": "已取消"} %}
+  <section class="admin-card">
+    <h2>所有求助</h2>
+    <form method="get" class="admin-search" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
+      <input class="input" type="text" name="q" placeholder="搜索标题或描述" value="{{ q }}" />
+      <select class="input" name="status" style="width:auto;">
+        <option value="">全部状态</option>
+        <option value="open" {{ 'selected' if status_filter == 'open' }}>待匹配</option>
+        <option value="in_progress" {{ 'selected' if status_filter == 'in_progress' }}>进行中</option>
+        <option value="completed" {{ 'selected' if status_filter == 'completed' }}>已完成</option>
+        <option value="cancelled" {{ 'selected' if status_filter == 'cancelled' }}>已取消</option>
+      </select>
+      <button class="btn" type="submit"><i class="fa-solid fa-magnifying-glass"></i> 筛选</button>
+    </form>
+
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>标题</th>
+          <th>发布者</th>
+          <th>分类</th>
+          <th>状态</th>
+          <th>价格</th>
+          <th>创建时间</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in pagination.items %}
+          <tr>
+            <td>{{ r.id }}</td>
+            <td><a href="{{ url_for('request_detail', request_id=r.id) }}">{{ r.title[:40] }}</a></td>
+            <td>
+              {% if r.user %}
+                <a href="{{ url_for('profile_view', username=r.user.username) }}">{{ r.user.username }}</a>
+              {% else %}
+                {{ r.user_id }}
+              {% endif %}
+            </td>
+            <td>{{ r.category or '-' }}</td>
+            <td>
+              {% set badge_class = {"open": "pending", "in_progress": "accepted", "completed": "completed", "cancelled": "rejected"} %}
+              <span class="badge {{ badge_class.get(r.status, '') }}">{{ status_labels.get(r.status, r.status) }}</span>
+            </td>
+            <td>{{ '%.2f ETH'|format(r.price) if r.price else ('志愿' if r.is_volunteer else '-') }}</td>
+            <td>{{ r.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+            <td class="action-cell">
+              <a class="btn small" href="{{ url_for('request_detail', request_id=r.id) }}">查看</a>
+              {% if r.status not in ('completed', 'cancelled') %}
+                <form method="post" action="{{ url_for('admin_cancel_request', request_id=r.id) }}" style="display:inline;" onsubmit="return confirm('确认关闭该求助？将通知相关用户。');">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button class="btn danger small" type="submit">关闭</button>
+                </form>
+              {% endif %}
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="8" class="muted" style="text-align:center;">暂无求助记录。</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="pagination">
+      {% if pagination.has_prev %}
+        <a class="btn secondary" href="{{ url_for('admin_requests', page=pagination.prev_num, q=q, status=status_filter) }}">上一页</a>
+      {% else %}
+        <span class="btn secondary" style="opacity:.6; pointer-events:none;">上一页</span>
+      {% endif %}
+      <span class="muted">第 {{ pagination.page }} 页，共 {{ pagination.pages }} 页（{{ pagination.total }} 条）</span>
+      {% if pagination.has_next %}
+        <a class="btn secondary" href="{{ url_for('admin_requests', page=pagination.next_num, q=q, status=status_filter) }}">下一页</a>
+      {% else %}
+        <span class="btn secondary" style="opacity:.6; pointer-events:none;">下一页</span>
+      {% endif %}
+    </div>
+  </section>
+{% endblock %}

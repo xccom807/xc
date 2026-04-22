@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(grep -r \"打卡\\\\|check.?in\\\\|checkin\" /d/bise/Kaspersky-519-WT-05-main --include=*.py --include=*.html)"
-    ]
-  }
-}

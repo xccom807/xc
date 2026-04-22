@@ -15,10 +15,16 @@
         <div class="stat"><div class="num">{{ totals.completed_requests }}</div><div class="label">已完成</div></div>
         <div class="stat"><div class="num">{{ totals.flagged }}</div><div class="label">被标记</div></div>
       </div>
-      <div class="actions">
-        <a class="btn" href="{{ url_for('admin_users') }}">管理用户</a>
-        <a class="btn secondary" href="{{ url_for('admin_moderation') }}">内容审核</a>
-        <a class="btn secondary" href="{{ url_for('blockchain_blocks') }}">查看区块链</a>
+      <div class="actions" style="flex-wrap:wrap;gap:.5rem;">
+        <a class="btn" href="{{ url_for('admin_users') }}"><i class="fa-solid fa-users"></i> 用户管理</a>
+        <a class="btn" href="{{ url_for('admin_requests') }}"><i class="fa-solid fa-clipboard-list"></i> 求助管理</a>
+        <a class="btn secondary" href="{{ url_for('admin_moderation') }}"><i class="fa-solid fa-flag"></i> 举报审核</a>
+        <a class="btn secondary" href="{{ url_for('admin_payments') }}"><i class="fa-solid fa-coins"></i> 支付记录</a>
+        <a class="btn secondary" href="{{ url_for('blockchain_blocks') }}"><i class="fa-solid fa-cube"></i> 区块链</a>
+        <a class="btn secondary" href="{{ url_for('web3_status') }}"><i class="fa-solid fa-link"></i> Web3 状态</a>
+        <a class="btn secondary" href="{{ url_for('admin_broadcast') }}"><i class="fa-solid fa-bullhorn"></i> 发布公告</a>
+        <a class="btn secondary" href="{{ url_for('admin_export', data_type='users') }}"><i class="fa-solid fa-download"></i> 导出用户</a>
+        <a class="btn secondary" href="{{ url_for('admin_export', data_type='requests') }}"><i class="fa-solid fa-download"></i> 导出求助</a>
       </div>
     </section>
 

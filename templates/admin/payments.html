@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+{% block content %}
+  <section class="admin-card">
+    <h2>支付记录</h2>
+    <form method="get" class="admin-search" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
+      <select class="input" name="status" style="width:auto;">
+        <option value="">全部状态</option>
+        <option value="address_submitted" {{ 'selected' if status_filter == 'address_submitted' }}>待支付</option>
+        <option value="paid" {{ 'selected' if status_filter == 'paid' }}>已支付</option>
+      </select>
+      <button class="btn" type="submit"><i class="fa-solid fa-filter"></i> 筛选</button>
+    </form>
+
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>求助</th>
+          <th>求助者</th>
+          <th>帮助者</th>
+          <th>金额</th>
+          <th>收款地址</th>
+          <th>状态</th>
+          <th>交易哈希</th>
+          <th>时间</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in pagination.items %}
+          <tr>
+            <td>{{ p.id }}</td>
+            <td>
+              {% if p.help_request %}
+                <a href="{{ url_for('request_detail', request_id=p.request_id) }}">{{ p.help_request.title[:25] }}</a>
+              {% else %}
+                #{{ p.request_id }}
+              {% endif %}
+            </td>
+            <td>
+              {% if p.requester %}
+                <a href="{{ url_for('profile_view', username=p.requester.username) }}">{{ p.requester.username }}</a>
+              {% else %}
+                {{ p.requester_id }}
+              {% endif %}
+            </td>
+            <td>
+              {% if p.helper %}
+                <a href="{{ url_for('profile_view', username=p.helper.username) }}">{{ p.helper.username }}</a>
+              {% else %}
+                {{ p.helper_id }}
+              {% endif %}
+            </td>
+            <td>{{ '%.4f'|format(p.amount) }} ETH</td>
+            <td style="font-family:monospace;font-size:.8rem;">{{ p.helper_address[:10] }}...{{ p.helper_address[-6:] }}</td>
+            <td>
+              {% if p.status == 'paid' %}
+                <span class="badge completed">已支付</span>
+              {% else %}
+                <span class="badge pending">待支付</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if p.tx_hash %}
+                <a href="https://sepolia.etherscan.io/tx/{{ p.tx_hash }}" target="_blank" rel="noopener" style="font-family:monospace;font-size:.8rem;">{{ p.tx_hash[:12] }}...</a>
+              {% else %}
+                <span class="muted">-</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if p.paid_at %}
+                {{ p.paid_at.strftime('%Y-%m-%d %H:%M') }}
+              {% else %}
+                {{ p.address_submitted_at.strftime('%Y-%m-%d %H:%M') }}
+              {% endif %}
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="9" class="muted" style="text-align:center;">暂无支付记录。</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="pagination">
+      {% if pagination.has_prev %}
+        <a class="btn secondary" href="{{ url_for('admin_payments', page=pagination.prev_num, status=status_filter) }}">上一页</a>
+      {% else %}
+        <span class="btn secondary" style="opacity:.6; pointer-events:none;">上一页</span>
+      {% endif %}
+      <span class="muted">第 {{ pagination.page }} 页，共 {{ pagination.pages }} 页（{{ pagination.total }} 条）</span>
+      {% if pagination.has_next %}
+        <a class="btn secondary" href="{{ url_for('admin_payments', page=pagination.next_num, status=status_filter) }}">下一页</a>
+      {% else %}
+        <span class="btn secondary" style="opacity:.6; pointer-events:none;">下一页</span>
+      {% endif %}
+    </div>
+  </section>
+{% endblock %}

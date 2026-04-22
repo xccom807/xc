@@ -1,8 +1,0 @@
-Flask
-Flask-SQLAlchemy
-Flask-Login
-Flask-WTF
-Flask-Scss
-pyScss
-email_validator
-web3

@@ -4,7 +4,6 @@ import json
 import math
 from flask import Flask, render_template, redirect, url_for, flash, abort, request, jsonify
 from flask_login import (
-    AnonymousUserMixin,
     login_required,
     login_user,
     logout_user,
@@ -14,7 +13,6 @@ from extensions import db, login_manager, csrf
 from web3_service import init_web3, get_web3, submit_anchor_transaction, get_signer_address
 import logging
 import secrets
-from flask_scss import Scss
 from blockchain_service import append_statement, maybe_seal_block
 from eth_account import Account
 from eth_account.messages import encode_defunct
@@ -35,9 +33,6 @@ def create_app() -> Flask:
     level = getattr(logging, str(app.config.get("LOG_LEVEL", "INFO")).upper(), logging.INFO)
     logging.basicConfig(level=level, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     logging.getLogger("werkzeug").setLevel(level)
-    # SCSS configuration
-    app.config.setdefault("SCSS_ASSET_DIR", "assets/scss")
-
     # Init extensions
     db.init_app(app)
     login_manager.init_app(app)
@@ -77,10 +72,6 @@ def create_app() -> Flask:
             pass
 
     # Flask-Login config
-    class _AnonymousUser(AnonymousUserMixin):
-        pass
-
-    login_manager.anonymous_user = _AnonymousUser
     login_manager.login_view = "login"
     login_manager.login_message = "请先登录后再访问该页面。"
     login_manager.login_message_category = "info"
@@ -240,9 +231,8 @@ def create_app() -> Flask:
 
     @app.route("/web3/balance")
     def web3_balance():
-        from flask import request as flask_request
         w3 = get_web3()
-        addr = flask_request.args.get("address", "").strip()
+        addr = request.args.get("address", "").strip()
         balance_eth = None
         error = None
         if w3 and addr:
@@ -552,7 +542,6 @@ def create_app() -> Flask:
     def forgot_password():
         from models import User, PasswordResetToken
         from forms import ForgotPasswordForm
-        import secrets
 
         form = ForgotPasswordForm()
         reset_link = None
@@ -576,7 +565,6 @@ def create_app() -> Flask:
     def reset_password(token: str):
         from models import PasswordResetToken
         from forms import ResetPasswordForm
-        from datetime import timedelta
 
         prt = PasswordResetToken.query.filter_by(token=token, used=False).first()
         if prt is None:
@@ -636,6 +624,8 @@ def create_app() -> Flask:
     @app.route("/dashboard")
     @login_required
     def dashboard():
+        if getattr(current_user, "user_type", "user") == "admin":
+            return redirect(url_for("admin"))
         from models import HelpRequest, HelpOffer, Review, Statement
 
         # Stats for the current user
@@ -725,10 +715,8 @@ def create_app() -> Flask:
     @app.route("/post-login-redirect")
     @login_required
     def post_login_redirect():
-        # Check for specific admin credentials
-        if (getattr(current_user, "username", "") == "admin" and
-            getattr(current_user, "email", "") == "admin@dailyhelper.com"):
-            return redirect(url_for("blockchain_blocks"))
+        if getattr(current_user, "user_type", "user") == "admin":
+            return redirect(url_for("admin"))
         return redirect(url_for("dashboard"))
 
     # ------------------
@@ -979,6 +967,9 @@ def create_app() -> Flask:
     @app.route("/request-help", methods=["GET", "POST"])
     @login_required
     def request_help():
+        if getattr(current_user, "user_type", "user") == "admin":
+            flash("管理员无需发布求助。", "info")
+            return redirect(url_for("admin"))
         from models import HelpRequest
         from forms import RequestHelpForm
 
@@ -1045,6 +1036,9 @@ def create_app() -> Flask:
     @app.route("/offer-help")
     @login_required
     def offer_help():
+        if getattr(current_user, "user_type", "user") == "admin":
+            flash("管理员无需提供帮助。", "info")
+            return redirect(url_for("admin"))
         from models import HelpRequest, HelpOffer
         from sqlalchemy import func
 
@@ -1085,7 +1079,6 @@ def create_app() -> Flask:
     def volunteer():
         from models import HelpRequest, HelpOffer
         from sqlalchemy import func
-        from datetime import datetime, timedelta
 
         # Base query: volunteer-only open requests
         q = HelpRequest.query.filter(
@@ -1291,7 +1284,6 @@ def create_app() -> Flask:
     @login_required
     def nearby():
         from models import User
-        import math
 
         # Require current user location
         if current_user.latitude is None or current_user.longitude is None:
@@ -1410,7 +1402,6 @@ def create_app() -> Flask:
                 q = q.filter(HelpRequest.is_volunteer.is_(False))
 
         # Date range (use created_at since time_needed is free text)
-        from datetime import datetime
         def parse_date(s):
             try:
                 return datetime.strptime(s, "%Y-%m-%d")
@@ -1421,7 +1412,6 @@ def create_app() -> Flask:
         if sd:
             q = q.filter(HelpRequest.created_at >= sd)
         if ed:
-            from datetime import timedelta
             q = q.filter(HelpRequest.created_at < ed + timedelta(days=1))
 
         # Sorting
@@ -1954,6 +1944,8 @@ def create_app() -> Flask:
     @app.route("/my-offers")
     @login_required
     def my_offers():
+        if getattr(current_user, "user_type", "user") == "admin":
+            return redirect(url_for("admin"))
         from models import HelpOffer, HelpRequest
 
         offers = (
@@ -2200,6 +2192,203 @@ def create_app() -> Flask:
 
         flash("公益组织已认证。", "success")
         return redirect(url_for("admin_moderation"))
+
+    # ------------------
+    # Admin: all requests list
+    # ------------------
+    @app.route("/admin/requests")
+    @login_required
+    @admin_required
+    def admin_requests():
+        from models import HelpRequest, User
+        q_text = request.args.get("q", "").strip()
+        status_filter = request.args.get("status", "").strip()
+        page = int(request.args.get("page", 1) or 1)
+        per_page = 20
+
+        query = HelpRequest.query
+        if q_text:
+            like = f"%{q_text}%"
+            query = query.filter(
+                (HelpRequest.title.ilike(like)) | (HelpRequest.description.ilike(like))
+            )
+        if status_filter:
+            query = query.filter(HelpRequest.status == status_filter)
+
+        pagination = query.order_by(HelpRequest.created_at.desc()).paginate(
+            page=page, per_page=per_page, error_out=False
+        )
+        return render_template(
+            "admin/requests.html",
+            pagination=pagination,
+            q=q_text,
+            status_filter=status_filter,
+        )
+
+    @app.post("/admin/requests/<int:request_id>/cancel")
+    @login_required
+    @admin_required
+    def admin_cancel_request(request_id: int):
+        from models import HelpRequest, HelpOffer
+        req = HelpRequest.query.get_or_404(request_id)
+        if req.status in ("completed", "cancelled"):
+            flash("该求助已完成或已取消，无法操作。", "info")
+            return redirect(url_for("admin_requests"))
+
+        old_status = req.status
+        req.status = "cancelled"
+        HelpOffer.query.filter_by(request_id=req.id, status="pending").update({"status": "rejected"})
+        accepted_offers = HelpOffer.query.filter_by(request_id=req.id, status="accepted").all()
+        for offer in accepted_offers:
+            offer.status = "rejected"
+            _notify(
+                offer.helper_id,
+                "request_cancelled",
+                f"管理员已关闭求助「{req.title[:40]}」。",
+                url_for("request_detail", request_id=req.id),
+            )
+        _notify(
+            req.user_id,
+            "request_cancelled",
+            f"管理员已关闭您的求助「{req.title[:40]}」。",
+            url_for("request_detail", request_id=req.id),
+        )
+        db.session.commit()
+
+        try:
+            append_statement(
+                kind="admin_cancel_request",
+                payload={
+                    "request_id": req.id,
+                    "previous_status": old_status,
+                    "admin_id": current_user.id,
+                },
+                user_id=current_user.id,
+            )
+            maybe_seal_block()
+        except Exception:
+            pass
+
+        flash(f"求助 #{req.id}「{req.title[:30]}」已被管理员关闭。", "success")
+        return redirect(url_for("admin_requests"))
+
+    # ------------------
+    # Admin: payments list
+    # ------------------
+    @app.route("/admin/payments")
+    @login_required
+    @admin_required
+    def admin_payments():
+        from models import Payment
+        page = int(request.args.get("page", 1) or 1)
+        per_page = 20
+        status_filter = request.args.get("status", "").strip()
+
+        query = Payment.query
+        if status_filter:
+            query = query.filter(Payment.status == status_filter)
+
+        pagination = query.order_by(Payment.address_submitted_at.desc()).paginate(
+            page=page, per_page=per_page, error_out=False
+        )
+        return render_template(
+            "admin/payments.html",
+            pagination=pagination,
+            status_filter=status_filter,
+        )
+
+    # ------------------
+    # Admin: CSV export
+    # ------------------
+    @app.route("/admin/export/<string:data_type>")
+    @login_required
+    @admin_required
+    def admin_export(data_type: str):
+        import csv
+        import io
+        from flask import Response
+        from models import User, HelpRequest
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+
+        if data_type == "users":
+            writer.writerow(["ID", "用户名", "邮箱", "全名", "类型", "信誉分", "黑名单", "注册时间"])
+            for u in User.query.order_by(User.id.asc()).all():
+                writer.writerow([
+                    u.id, u.username, u.email, u.full_name or "",
+                    u.user_type, f"{u.reputation_score:.1f}",
+                    "是" if u.is_blacklisted else "否",
+                    u.created_at.strftime("%Y-%m-%d %H:%M"),
+                ])
+            filename = "users.csv"
+        elif data_type == "requests":
+            writer.writerow(["ID", "标题", "发布者", "分类", "状态", "价格", "志愿", "创建时间"])
+            for r in HelpRequest.query.order_by(HelpRequest.id.asc()).all():
+                writer.writerow([
+                    r.id, r.title, r.user.username if r.user else r.user_id,
+                    r.category or "", r.status,
+                    f"{r.price:.2f}" if r.price else "0",
+                    "是" if r.is_volunteer else "否",
+                    r.created_at.strftime("%Y-%m-%d %H:%M"),
+                ])
+            filename = "requests.csv"
+        else:
+            abort(404)
+
+        output.seek(0)
+        bom = "\ufeff"
+        return Response(
+            bom + output.getvalue(),
+            mimetype="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+
+    # ------------------
+    # Admin: broadcast notification
+    # ------------------
+    @app.route("/admin/broadcast", methods=["GET", "POST"])
+    @login_required
+    @admin_required
+    def admin_broadcast():
+        from models import User, Notification
+        if request.method == "POST":
+            message = (request.form.get("message") or "").strip()
+            if not message:
+                flash("公告内容不能为空。", "error")
+                return redirect(url_for("admin_broadcast"))
+
+            users = User.query.filter(User.user_type != "admin").all()
+            count = 0
+            for u in users:
+                n = Notification(
+                    user_id=u.id,
+                    kind="admin_broadcast",
+                    message=message,
+                    link=None,
+                )
+                db.session.add(n)
+                count += 1
+            db.session.commit()
+
+            try:
+                append_statement(
+                    kind="admin_broadcast",
+                    payload={
+                        "message": message[:200],
+                        "recipient_count": count,
+                        "admin_id": current_user.id,
+                    },
+                    user_id=current_user.id,
+                )
+                maybe_seal_block()
+            except Exception:
+                pass
+
+            flash(f"公告已发送给 {count} 位用户。", "success")
+            return redirect(url_for("admin"))
+
+        return render_template("admin/broadcast.html")
 
     # Profiles
     @app.route("/u/<string:username>")

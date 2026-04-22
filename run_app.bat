@@ -14,7 +14,7 @@ set ETH_SIGNER_PRIVATE_KEY=d0863861c64d330cfcc228d6dd79e51ff9d10e0728976c8472e90
 :: 可选：区块浏览器地址
 set ETH_EXPLORER_TX_BASE_URL=https://sepolia.etherscan.io/tx
 :: 是否自动上链
-set BLOCKCHAIN_ANCHOR_AUTO=true
+set BLOCKCHAIN_ANCHOR_AUTO=false
 
 :: Activate virtual environment and run Flask app
 echo Starting DailyHelper application...

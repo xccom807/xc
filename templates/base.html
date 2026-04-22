@@ -28,29 +28,31 @@
         </div>
 
         <nav class="nav-links" id="nav">
-          <a href="{{ url_for('index') }}"><i class="fa-solid fa-house"></i> 首页</a>
-          <a href="{{ url_for('search_page') }}"><i class="fa-solid fa-magnifying-glass"></i> 搜索</a>
-          <a href="{{ url_for('leaderboard') }}"><i class="fa-solid fa-ranking-star"></i> 排行榜</a>
-          <a href="{{ url_for('chatbot') }}"><i class="fa-solid fa-robot"></i> 智能助手</a>
-          <a href="javascript:void(0)" class="wallet-connect" id="connectMetaMaskBtn" onclick="connectMetaMaskNav()"><i class="fa-solid fa-wallet"></i> 连接 MetaMask</a>
+          {% if current_user.is_authenticated and current_user.user_type == 'admin' %}
+            <a href="{{ url_for('admin') }}"><i class="fa-solid fa-shield"></i> 管理后台</a>
+          {% else %}
+            <a href="{{ url_for('index') }}"><i class="fa-solid fa-house"></i> 首页</a>
+            <a href="{{ url_for('search_page') }}"><i class="fa-solid fa-magnifying-glass"></i> 搜索</a>
+            <a href="{{ url_for('leaderboard') }}"><i class="fa-solid fa-ranking-star"></i> 排行榜</a>
+            <a href="{{ url_for('chatbot') }}"><i class="fa-solid fa-robot"></i> 智能助手</a>
+            <a href="javascript:void(0)" class="wallet-connect" id="connectMetaMaskBtn" onclick="connectMetaMaskNav()"><i class="fa-solid fa-wallet"></i> 连接 MetaMask</a>
+          {% endif %}
           {% if current_user.is_authenticated %}
-            <a href="{{ url_for('dashboard') }}"><i class="fa-solid fa-gauge"></i> 仪表盘</a>
-            <a href="{{ url_for('messages_inbox') }}" class="nav-notification">
-              <i class="fa-regular fa-envelope"></i> 私信
-              {% if unread_messages > 0 %}
-                <span class="notification-badge">{{ unread_messages }}</span>
-              {% endif %}
-            </a>
-            <a href="{{ url_for('profile_view', username=current_user.username) }}"><i class="fa-solid fa-user"></i> 我的资料</a>
-            <a href="{{ url_for('notifications') }}" class="nav-notification">
-              <i class="fa-regular fa-bell"></i> 通知
-              {% if unread_notifications > 0 %}
-                <span class="notification-badge">{{ unread_notifications }}</span>
-              {% endif %}
-            </a>
-            {% if current_user.username == 'admin' and current_user.email == 'admin@dailyhelper.com' %}
-              <a href="{{ url_for('admin') }}"><i class="fa-solid fa-shield"></i> 管理员</a>
-              <a href="{{ url_for('blockchain_blocks') }}"><i class="fa-solid fa-cube"></i> 区块链</a>
+            {% if current_user.user_type != 'admin' %}
+              <a href="{{ url_for('dashboard') }}"><i class="fa-solid fa-gauge"></i> 仪表盘</a>
+              <a href="{{ url_for('messages_inbox') }}" class="nav-notification">
+                <i class="fa-regular fa-envelope"></i> 私信
+                {% if unread_messages > 0 %}
+                  <span class="notification-badge">{{ unread_messages }}</span>
+                {% endif %}
+              </a>
+              <a href="{{ url_for('profile_view', username=current_user.username) }}"><i class="fa-solid fa-user"></i> 我的资料</a>
+              <a href="{{ url_for('notifications') }}" class="nav-notification">
+                <i class="fa-regular fa-bell"></i> 通知
+                {% if unread_notifications > 0 %}
+                  <span class="notification-badge">{{ unread_notifications }}</span>
+                {% endif %}
+              </a>
             {% endif %}
             <a href="{{ url_for('logout') }}"><i class="fa-solid fa-right-from-bracket"></i> 退出</a>
           {% else %}

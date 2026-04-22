@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block content %}
+  <section class="admin-card">
+    <h2>发布公告</h2>
+    <p class="muted">公告将以站内通知形式发送给所有普通用户。</p>
+    <form method="post" action="{{ url_for('admin_broadcast') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="field">
+        <label>公告内容</label>
+        <textarea class="input" name="message" rows="4" placeholder="输入公告内容..." required></textarea>
+      </div>
+      <div class="actions" style="margin-top:1rem;">
+        <button class="btn" type="submit" onclick="return confirm('确认发送公告给所有用户？');">
+          <i class="fa-solid fa-bullhorn"></i> 发送公告
+        </button>
+        <a class="btn secondary" href="{{ url_for('admin') }}">返回</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}
