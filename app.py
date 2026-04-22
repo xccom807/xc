@@ -1176,110 +1176,6 @@ def create_app() -> Flask:
             categories=volunteer_categories,
         )
 
-    @app.route("/ngos")
-    def ngos():
-        from models import NGO
-
-        q = NGO.query
-        category = request.args.get("category", "").strip()
-        location_q = request.args.get("location", "").strip()
-        sort = request.args.get("sort", "newest")
-        page = int(request.args.get("page", 1) or 1)
-        per_page = 9
-
-        if category:
-            q = q.filter(NGO.category == category)
-        if location_q:
-            q = q.filter(NGO.location.ilike(f"%{location_q}%"))
-
-        if sort == "newest":
-            q = q.order_by(NGO.created_at.desc())
-        else:
-            q = q.order_by(NGO.name.asc())
-
-        pagination = q.paginate(page=page, per_page=per_page, error_out=False)
-        items = pagination.items
-
-        categories = [
-            "教育",
-            "医疗健康",
-            "环境保护",
-            "扶贫",
-            "动物福利",
-            "妇女儿童",
-            "灾害救援",
-            "其他",
-        ]
-
-        return render_template(
-            "features/ngos.html",
-            items=items,
-            pagination=pagination,
-            categories=categories,
-            filters={
-                "category": category,
-                "location": location_q,
-                "sort": sort,
-            },
-        )
-
-    @app.route("/ngos/<int:ngo_id>")
-    def ngo_detail(ngo_id: int):
-        from models import NGO
-        ngo = NGO.query.get_or_404(ngo_id)
-        # Placeholder campaigns/needs
-        campaigns = [
-            {"title": "每月食物捐赠", "need": "需要分发志愿者"},
-            {"title": "学习用品捐赠", "need": "需要笔记本和笔的捐赠"},
-        ]
-        return render_template("features/ngo_detail.html", ngo=ngo, campaigns=campaigns)
-
-    @app.route("/ngos/submit", methods=["GET", "POST"])
-    @login_required
-    def ngo_submit():
-        from models import NGO
-        from forms import NGOForm
-
-        form = NGOForm()
-        if form.validate_on_submit():
-            ngo = NGO(
-                name=form.name.data,
-                description=form.description.data,
-                category=form.category.data or None,
-                location=form.location.data or None,
-                contact_email=form.contact_email.data or None,
-                website=form.website.data or None,
-                verified_status=False,
-            )
-            db.session.add(ngo)
-            db.session.commit()
-
-            # Blockchain log: NGO submission
-            try:
-                append_statement(
-                    kind="ngo_submit",
-                    payload={
-                        "ngo_id": ngo.id,
-                        "name": ngo.name,
-                        "category": ngo.category,
-                        "location": ngo.location,
-                    },
-                    user_id=current_user.id,
-                )
-                maybe_seal_block()
-            except Exception:  # noqa: BLE001
-                pass
-
-            flash("公益组织已提交审核，我们的团队将进行验证并发布。", "success")
-            return redirect(url_for("ngos"))
-
-        if request.method == "POST" and form.errors:
-            for field, errs in form.errors.items():
-                for e in errs:
-                    flash(f"{field}: {e}", "error")
-
-        return render_template("features/ngo_submit.html", form=form)
-
     @app.route("/nearby")
     @login_required
     def nearby():
@@ -1768,15 +1664,20 @@ def create_app() -> Flask:
                 )
                 can_review = already is None
 
+        # Determine if current user is the helper for this task
+        is_helper = False
+        if current_user.is_authenticated and req.status in ("in_progress", "completed", "disputed"):
+            active_offer = HelpOffer.query.filter_by(
+                request_id=req.id, helper_id=current_user.id
+            ).filter(HelpOffer.status.in_(("accepted", "completed"))).first()
+            if active_offer:
+                is_helper = True
+
         # Payment info for completed paid tasks
         payment = None
-        is_helper = False
         if req.status == "completed" and req.price and not req.is_volunteer:
             from models import Payment
             payment = Payment.query.filter_by(request_id=req.id).first()
-            completed_offer = HelpOffer.query.filter_by(request_id=req.id, status="completed").first()
-            if completed_offer:
-                is_helper = current_user.id == completed_offer.helper_id
 
         return render_template(
             "features/request_detail.html",
@@ -1969,7 +1870,7 @@ def create_app() -> Flask:
     @login_required
     @admin_required
     def admin():
-        from models import User, HelpRequest, Flag, NGO, Statement
+        from models import User, HelpRequest, Flag, Statement
         total_users = db.session.query(User).count()
         total_requests = db.session.query(HelpRequest).count()
         open_requests = db.session.query(HelpRequest).filter_by(status="open").count()
@@ -2067,8 +1968,34 @@ def create_app() -> Flask:
     @login_required
     @admin_required
     def admin_delete_user(user_id: int):
-        from models import User
+        from models import (
+            User, HelpRequest, HelpOffer, Review, Payment,
+            Message, Notification, Flag, WalletLink, Statement,
+        )
         u = User.query.get_or_404(user_id)
+        if u.user_type == "admin":
+            flash("无法删除管理员账户。", "error")
+            return redirect(url_for("admin_users"))
+
+        uname = u.username
+
+        # 清除关联数据（按外键依赖顺序）
+        Review.query.filter((Review.reviewer_id == user_id) | (Review.reviewee_id == user_id)).delete(synchronize_session=False)
+        Payment.query.filter((Payment.helper_id == user_id) | (Payment.requester_id == user_id)).delete(synchronize_session=False)
+        Message.query.filter((Message.sender_id == user_id) | (Message.receiver_id == user_id)).delete(synchronize_session=False)
+        Notification.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+        Flag.query.filter_by(reporter_id=user_id).delete(synchronize_session=False)
+        WalletLink.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+        Statement.query.filter_by(user_id=user_id).update({"user_id": None}, synchronize_session=False)
+
+        # 删除用户发出的 offer
+        HelpOffer.query.filter_by(helper_id=user_id).delete(synchronize_session=False)
+        # 删除用户发布的任务（先删任务关联的 offer）
+        user_requests = HelpRequest.query.filter_by(user_id=user_id).all()
+        for req in user_requests:
+            HelpOffer.query.filter_by(request_id=req.id).delete(synchronize_session=False)
+        HelpRequest.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+
         db.session.delete(u)
         db.session.commit()
 
@@ -2078,7 +2005,7 @@ def create_app() -> Flask:
                 kind="admin_delete_user",
                 payload={
                     "target_user_id": user_id,
-                    "deleted_username": u.username,
+                    "deleted_username": uname,
                     "admin_id": current_user.id,
                 },
                 user_id=current_user.id,
@@ -2087,7 +2014,7 @@ def create_app() -> Flask:
         except Exception:  # noqa: BLE001
             pass
 
-        flash("用户已删除。", "success")
+        flash(f"用户 {uname} 及其所有数据已删除。", "success")
         return redirect(url_for("admin_users"))
 
     # ------------------
@@ -2097,10 +2024,9 @@ def create_app() -> Flask:
     @login_required
     @admin_required
     def admin_moderation():
-        from models import Flag, NGO
+        from models import Flag
         flags = Flag.query.order_by(Flag.created_at.desc()).limit(50).all()
-        pending_ngos = NGO.query.filter_by(verified_status=False).order_by(NGO.created_at.desc()).all()
-        return render_template("admin/moderation.html", flags=flags, pending_ngos=pending_ngos)
+        return render_template("admin/moderation.html", flags=flags)
 
     @app.post("/admin/flags/<int:flag_id>/<string:action>")
     @login_required
@@ -2164,33 +2090,6 @@ def create_app() -> Flask:
             flash("举报已驳回。", "success")
 
         db.session.commit()
-        return redirect(url_for("admin_moderation"))
-
-    @app.post("/admin/ngos/<int:ngo_id>/verify")
-    @login_required
-    @admin_required
-    def admin_verify_ngo(ngo_id: int):
-        from models import NGO
-        n = NGO.query.get_or_404(ngo_id)
-        n.verified_status = True
-        db.session.commit()
-
-        # Blockchain log: NGO verified
-        try:
-            append_statement(
-                kind="admin_verify_ngo",
-                payload={
-                    "ngo_id": ngo_id,
-                    "ngo_name": n.name,
-                    "admin_id": current_user.id,
-                },
-                user_id=current_user.id,
-            )
-            maybe_seal_block()
-        except Exception:  # noqa: BLE001
-            pass
-
-        flash("公益组织已认证。", "success")
         return redirect(url_for("admin_moderation"))
 
     # ------------------
@@ -2389,6 +2288,179 @@ def create_app() -> Flask:
             return redirect(url_for("admin"))
 
         return render_template("admin/broadcast.html")
+
+    # ------------------
+    # SBT: Merkle Proof API (用户前端请求 proof 后唤起 MetaMask Mint)
+    # ------------------
+    @app.route("/api/sbt/proof")
+    @login_required
+    def api_sbt_proof():
+        from merkle_service import get_user_proof
+        proof_data = get_user_proof(app, current_user.id)
+        if proof_data is None:
+            return jsonify({"error": "不满足 SBT 申领条件（需信誉≥20且已绑定钱包）"}), 400
+        return jsonify(proof_data)
+
+    @app.route("/api/sbt/status/<string:address>")
+    def api_sbt_status(address: str):
+        """查询某地址的 SBT 链上状态（前端调用合约后回显用）。"""
+        return jsonify({
+            "address": address,
+            "sbt_contract": app.config.get("SBT_CONTRACT_ADDRESS", ""),
+            "chain_id": int(app.config.get("ETH_CHAIN_ID", 11155111)),
+            "hint": "Use sbt_contract ABI getSBT(address) on-chain for live data",
+        })
+
+    # ------------------
+    # Admin: Merkle Root 管理面板
+    # ------------------
+    @app.route("/admin/sbt", methods=["GET", "POST"])
+    @login_required
+    @admin_required
+    def admin_sbt():
+        from merkle_service import build_merkle_tree_from_db, update_merkle_root_onchain
+
+        result = None
+        tree, entries = build_merkle_tree_from_db(app)
+
+        if request.method == "POST":
+            result = update_merkle_root_onchain(app)
+            if result.get("success"):
+                try:
+                    append_statement(
+                        kind="merkle_root_update",
+                        payload={
+                            "root": result["root"],
+                            "tx_hash": result["tx_hash"],
+                            "eligible_count": result["eligible_count"],
+                            "admin_id": current_user.id,
+                        },
+                        user_id=current_user.id,
+                    )
+                    maybe_seal_block()
+                except Exception:
+                    pass
+                flash(f"Merkle Root 已上链！共 {result['eligible_count']} 名合格用户。", "success")
+            else:
+                flash(f"上链失败：{result.get('error', '未知错误')}", "error")
+
+        return render_template(
+            "admin/sbt.html",
+            tree=tree,
+            entries=entries,
+            result=result,
+            sbt_address=app.config.get("SBT_CONTRACT_ADDRESS", ""),
+        )
+
+    # ------------------
+    # Escrow: 链上状态同步回调 (前端交易成功后调用)
+    # ------------------
+    @app.post("/api/escrow/sync")
+    @csrf.exempt
+    @login_required
+    def api_escrow_sync():
+        """
+        前端完成链上交易后回调此 API，同步更新 SQLite 中的任务状态。
+        payload: { task_id, action, tx_hash }
+        action: "lock" | "release" | "dispute" | "resolve"
+        """
+        from models import HelpRequest, HelpOffer
+        data = request.get_json(silent=True) or {}
+        task_id = data.get("task_id")
+        action = data.get("action")
+        tx_hash = data.get("tx_hash", "")
+
+        if not task_id or not action:
+            return jsonify({"error": "task_id and action required"}), 400
+
+        req = HelpRequest.query.get(task_id)
+        if not req:
+            return jsonify({"error": "task not found"}), 404
+
+        status_map = {
+            "lock": "in_progress",       # 资金锁定 → 进行中
+            "release": "completed",      # 释放资金 → 已完成
+            "dispute": "disputed",       # 发起仲裁
+            "resolve": "completed",      # 仲裁完成
+        }
+        new_status = status_map.get(action)
+        if not new_status:
+            return jsonify({"error": f"unknown action: {action}"}), 400
+
+        old_status = req.status
+        req.status = new_status
+
+        # 如果是资金锁定（接受提议），同步更新 Offer 状态
+        if action == "lock":
+            accepted_offer = HelpOffer.query.filter_by(
+                request_id=req.id, status="accepted"
+            ).first()
+            if accepted_offer:
+                # 通知帮助者
+                _notify(
+                    accepted_offer.helper_id,
+                    "escrow_locked",
+                    f"求助「{req.title[:30]}」的赏金已锁定到智能合约。",
+                    url_for("request_detail", request_id=req.id),
+                )
+
+        db.session.commit()
+
+        try:
+            append_statement(
+                kind=f"escrow_{action}",
+                payload={
+                    "task_id": task_id,
+                    "action": action,
+                    "tx_hash": tx_hash,
+                    "old_status": old_status,
+                    "new_status": new_status,
+                    "user_id": current_user.id,
+                },
+                user_id=current_user.id,
+            )
+            maybe_seal_block()
+        except Exception:
+            pass
+
+        return jsonify({"success": True, "new_status": new_status})
+
+    # ------------------
+    # DAO 仲裁大厅 (信誉>=80 专家用户)
+    # ------------------
+    @app.route("/arbitration")
+    @login_required
+    def arbitration_hall():
+        from models import HelpRequest
+        if current_user.reputation_score < 80:
+            flash("仲裁大厅需要信誉分达到 80（金牌）才能进入。", "info")
+            return redirect(url_for("dashboard"))
+
+        # 查询所有 disputed 状态的任务
+        disputed = HelpRequest.query.filter_by(status="disputed").order_by(
+            HelpRequest.created_at.desc()
+        ).all()
+
+        return render_template(
+            "features/arbitration.html",
+            disputed=disputed,
+            escrow_address=app.config.get("ESCROW_CONTRACT_ADDRESS", ""),
+            sbt_address=app.config.get("SBT_CONTRACT_ADDRESS", ""),
+            chain_id=int(app.config.get("ETH_CHAIN_ID", 11155111)),
+            rpc_url=app.config.get("ETH_RPC_URL", ""),
+            vote_threshold=int(app.config.get("DAO_VOTE_THRESHOLD", 1)),
+        )
+
+    @app.route("/api/contracts/config")
+    def api_contracts_config():
+        """前端获取合约地址和链配置。"""
+        return jsonify({
+            "sbt_contract": app.config.get("SBT_CONTRACT_ADDRESS", ""),
+            "escrow_contract": app.config.get("ESCROW_CONTRACT_ADDRESS", ""),
+            "chain_id": int(app.config.get("ETH_CHAIN_ID", 11155111)),
+            "rpc_url": app.config.get("ETH_RPC_URL", ""),
+            "explorer_base": app.config.get("ETH_EXPLORER_TX_BASE_URL", ""),
+        })
 
     # Profiles
     @app.route("/u/<string:username>")
@@ -2831,13 +2903,13 @@ def create_app() -> Flask:
 4. **信誉系统（对数衰减）**：delta = base_points * (1/log2(当前分+2)) * 评论字数加成。分越高加分越少，鼓励详细评价
 5. **私信系统**：接受提议后双方可私聊
 6. **区块链审计**：所有操作记录为 Statement → 自动封块 Block → 可锚定 Sepolia
-7. **管理后台**：用户管理、举报审核、NGO 认证
-8. **其他**：全局搜索、排行榜、志愿专区、附近的人、公益组织
+7. **管理后台**：用户管理、举报审核
+8. **其他**：全局搜索、排行榜、志愿专区、附近的人
 
 ## 常用页面
 - /dashboard 仪表盘  - /marketplace 帮助市场  - /request-help 发布求助
 - /messages 私信  - /notifications 通知  - /leaderboard 排行榜
-- /volunteer 志愿专区  - /nearby 附近的人  - /ngos 公益组织
+- /volunteer 志愿专区  - /nearby 附近的人
 - /blockchain/blocks 区块浏览器  - /admin 管理后台（仅管理员）
 
 ## 回答要求
@@ -2918,3 +2990,4 @@ def create_app() -> Flask:
 if __name__ == "__main__":
     application = create_app()
     application.run(host="127.0.0.1", port=5000, debug=True)
+from flask import Flask, jsonify, render_template, request

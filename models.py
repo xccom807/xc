@@ -84,7 +84,7 @@ class HelpRequest(db.Model):
     is_volunteer = db.Column(db.Boolean, nullable=False, default=False)
     status = db.Column(
         db.String(20), nullable=False, default="open"
-    )  # open/in_progress/completed/cancelled
+    )  # open/in_progress/completed/cancelled/disputed
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
     # Relationships

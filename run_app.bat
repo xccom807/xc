@@ -15,6 +15,10 @@ set ETH_SIGNER_PRIVATE_KEY=d0863861c64d330cfcc228d6dd79e51ff9d10e0728976c8472e90
 set ETH_EXPLORER_TX_BASE_URL=https://sepolia.etherscan.io/tx
 :: 是否自动上链
 set BLOCKCHAIN_ANCHOR_AUTO=false
+:: ---- Smart Contracts (Sepolia) ----
+set SBT_CONTRACT_ADDRESS=0xC80713Ae1aB233BB29b9991a80BA7594f5C128F3
+set ESCROW_CONTRACT_ADDRESS=0x90413AfD18C53172d09caD650FB5Fd80b7154002
+set DAO_VOTE_THRESHOLD=1
 
 :: Activate virtual environment and run Flask app
 echo Starting DailyHelper application...

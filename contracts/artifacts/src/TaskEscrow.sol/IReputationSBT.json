@@ -1,0 +1,54 @@
+{
+  "_format": "hh-sol-artifact-1",
+  "contractName": "IReputationSBT",
+  "sourceName": "src/TaskEscrow.sol",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "account",
+          "type": "address"
+        },
+        {
+          "internalType": "enum IReputationSBT.Tier",
+          "name": "minTier",
+          "type": "uint8"
+        }
+      ],
+      "name": "hasMinTier",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "account",
+          "type": "address"
+        }
+      ],
+      "name": "tierOf",
+      "outputs": [
+        {
+          "internalType": "enum IReputationSBT.Tier",
+          "name": "",
+          "type": "uint8"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x",
+  "deployedBytecode": "0x",
+  "linkReferences": {},
+  "deployedLinkReferences": {}
+}

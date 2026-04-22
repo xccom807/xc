@@ -15,7 +15,7 @@ from app import create_app
 from extensions import db
 from models import (
     User, HelpRequest, HelpOffer, Review, Payment,
-    Message, Notification, NGO, Flag,
+    Message, Notification, NGO, Flag, WalletLink,
 )
 
 
@@ -82,22 +82,22 @@ def seed():
         reqs = []
         rdata = [
             (alice.id, "Need help moving furniture", "Moving to new apartment, need help with sofa and desk.",
-             "Moving", "Beijing Haidian", "Sat 10-13", 150.0, False, "completed", 20),
+             "Moving", "Beijing Haidian", "Sat 10-13", 0.05, False, "completed", 20),
             (alice.id, "Math tutoring for high school student",
              "Brother needs calculus help, 2h/session twice weekly.",
-             "Tutoring", "Beijing Chaoyang", "Weekday 19-21", 200.0, False, "in_progress", 15),
+             "Tutoring", "Beijing Chaoyang", "Weekday 19-21", 0.08, False, "in_progress", 15),
             (diana.id, "Free English conversation practice",
              "Exchange student looking for English practice. Will teach Japanese in return!",
              "Language", "Beijing Dongcheng", "Weekend afternoons", 0.0, True, "open", 10),
             (bob.id, "Need someone to fix my laptop",
              "Laptop running slowly, might need clean install or hardware check.",
-             "IT Support", "Beijing Xicheng", "Any weekday PM", 100.0, False, "open", 7),
+             "IT Support", "Beijing Xicheng", "Any weekday PM", 0.03, False, "open", 7),
             (eve.id, "Community garden volunteer needed",
              "Neighborhood garden needs volunteers for spring planting.",
              "Volunteer", "Guangzhou Tianhe", "Sat 9-12", 0.0, True, "open", 5),
             (alice.id, "Help translating a research paper",
              "10-page paper Chinese to English, ML in healthcare topic.",
-             "Translation", "Online", "Within one week", 300.0, False, "open", 2),
+             "Translation", "Online", "Within one week", 0.1, False, "open", 2),
         ]
         for uid, title, desc, cat, loc, time, price, vol, status, days in rdata:
             r = HelpRequest(user_id=uid, title=title, description=desc, category=cat,
@@ -212,13 +212,79 @@ def seed():
                     created_at=now - timedelta(days=3))
         db.session.add(flag)
 
+        # 11. Expert Users (high reputation for DAO arbitration demo)
+        experts_data = [
+            ("expert1", "expert1@test.com", "Frank Expert", "Beijing", 39.91, 116.41,
+             "Blockchain specialist, community arbitrator.", "Solidity, Audit", 50),
+            ("expert2", "expert2@test.com", "Grace Judge", "Shanghai", 31.23, 121.47,
+             "Senior mediator with years of experience.", "Mediation, Law", 45),
+            ("expert3", "expert3@test.com", "Henry Arbiter", "Shenzhen", 22.54, 114.06,
+             "Professional dispute resolution expert.", "Arbitration, DeFi", 40),
+        ]
+        experts = {}
+        for uname, email, fname, loc, lat, lng, bio, skills, days in experts_data:
+            u = User(username=uname, email=email, full_name=fname, location=loc,
+                     latitude=lat, longitude=lng, bio=bio, skills=skills,
+                     reputation_score=85.0,  # Gold tier (>=80)
+                     created_at=now - timedelta(days=days))
+            u.set_password("test123")
+            db.session.add(u)
+            experts[uname] = u
+        db.session.flush()
+        print(f"  Experts: {experts['expert1'].id}-{experts['expert3'].id} (rep=85, Gold tier)")
+
+        # 12. Wallet Links (MetaMask bindings for key users)
+        # These are demo addresses on Sepolia testnet
+        wallet_data = [
+            (alice.id,  "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"),
+            (bob.id,    "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"),
+            (charlie.id,"0x90F79bf6EB2c4f870365E785982E1f101E93b906"),
+            (experts["expert1"].id, "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65"),
+            (experts["expert2"].id, "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc"),
+            (experts["expert3"].id, "0x976EA74026E726554dB657fA54763abd0C3a0aa9"),
+        ]
+        for uid, addr in wallet_data:
+            wl = WalletLink(user_id=uid, address=addr,
+                            verified_at=now - timedelta(days=10),
+                            created_at=now - timedelta(days=10))
+            db.session.add(wl)
+        db.session.flush()
+        print(f"  Wallet links: {len(wallet_data)} created")
+
+        # 13. Disputed Task (for DAO arbitration demo)
+        disputed_req = HelpRequest(
+            user_id=diana.id,
+            title="Website redesign - disputed quality",
+            description="Paid for a website redesign, but the result did not meet expectations. "
+                        "Need DAO arbitration to resolve this dispute.",
+            category="IT Support", location="Online", time_needed="1 week",
+            price=0.05, is_volunteer=False, status="disputed",
+            created_at=now - timedelta(days=3),
+        )
+        db.session.add(disputed_req)
+        db.session.flush()
+
+        # Offer for disputed task
+        disputed_offer = HelpOffer(
+            request_id=disputed_req.id, helper_id=charlie.id,
+            message="I can redesign your site.", status="accepted",
+            created_at=now - timedelta(days=2),
+        )
+        db.session.add(disputed_offer)
+        print(f"  Disputed task: #{disputed_req.id} (for arbitration hall demo)")
+
         db.session.commit()
         print("\nDemo data seeded successfully!")
         print("=" * 50)
         print("Test accounts (password: test123):")
         print("  alice, bob, charlie, diana, eve")
+        print("  expert1, expert2, expert3 (Gold tier, rep=85)")
         print("Admin account: admin / admin123")
         print("=" * 50)
+        print("\nNew Web3 features:")
+        print("  - SBT: alice/bob/charlie have wallets, experts have Gold tier")
+        print("  - Arbitration: disputed task #%d ready for voting" % disputed_req.id)
+        print("  - Escrow: create paid tasks to test fund locking")
 
 
 if __name__ == "__main__":

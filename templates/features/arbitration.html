@@ -1,0 +1,328 @@
+{% extends 'base.html' %}
+{% block content %}
+  <section class="card">
+    <div class="hero">
+      <h2><i class="fa-solid fa-gavel"></i> DAO 仲裁大厅</h2>
+      <p class="muted">作为金牌信誉持有者，您可以对争议任务进行投票裁决。投票达到阈值（{{ vote_threshold }} 票）后合约将自动执行资金划转。</p>
+    </div>
+
+    {# ── 钱包 & 资格状态面板 ── #}
+    <div id="wallet-panel" style="background:var(--panel-color);border:1px solid var(--border-color);border-radius:var(--border-radius);padding:1rem;margin-bottom:1.5rem;">
+      <h3 style="margin-bottom:.75rem;"><i class="fa-solid fa-wallet"></i> 投票资格检查</h3>
+      <div id="wallet-status"><span class="muted">正在检查...</span></div>
+    </div>
+
+    {% if disputed %}
+      {% for r in disputed %}
+        <div class="card" style="margin-bottom:1rem;padding:1.25rem;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;">
+            <div>
+              <strong style="font-size:1.1rem;">#{{ r.id }} — <a href="{{ url_for('request_detail', request_id=r.id) }}">{{ r.title[:50] }}</a></strong>
+              <div class="muted" style="margin-top:.25rem;">
+                求助者:
+                {% if r.user %}<a href="{{ url_for('profile_view', username=r.user.username) }}">{{ r.user.username }}</a>{% else %}ID {{ r.user_id }}{% endif %}
+                · 赏金: {{ '%.4f ETH'|format(r.price) if r.price else '无' }}
+                · 创建: {{ r.created_at.strftime('%Y-%m-%d %H:%M') }}
+              </div>
+            </div>
+            <a class="btn btn-small secondary" href="{{ url_for('request_detail', request_id=r.id) }}"><i class="fa-solid fa-eye"></i> 查看详情</a>
+          </div>
+
+          {# 链上状态 + 投票按钮（JS 动态填充） #}
+          <div id="dispute-{{ r.id }}" style="margin-top:1rem;padding-top:.75rem;border-top:1px solid var(--border-color);">
+            <span class="muted">加载链上争议状态...</span>
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="flash info">当前没有争议中的任务。</div>
+    {% endif %}
+  </section>
+
+  <script>
+    const ESCROW_ADDR = "{{ escrow_address }}";
+    const SBT_ADDR    = "{{ sbt_address }}";
+    const CHAIN_ID    = {{ chain_id }};
+    const RPC_URL     = "{{ rpc_url }}";
+    const VOTE_THRESH = {{ vote_threshold }};
+    const TASK_IDS    = [{% for r in disputed %}{{ r.id }}{{ "," if not loop.last }}{% endfor %}];
+
+    const ESCROW_ABI = [
+      "function voteOnDispute(uint256 taskId, uint8 choice) external",
+      "function getEscrow(uint256 taskId) external view returns (address,address,uint256,uint8,uint64,uint64,uint32,uint32)",
+      "function getVote(uint256 taskId, address voter) external view returns (uint8)"
+    ];
+    const SBT_ABI = [
+      "function hasMinTier(address user, uint8 tier) external view returns (bool)",
+      "function getSBT(address user) external view returns (uint256,uint8,uint256)"
+    ];
+
+    // 全局状态
+    let readProvider = null;
+    let escrowRead = null;
+    let sbtRead = null;
+    let voterAddr = null;
+    let hasGold = false;
+    let walletReady = false;
+
+    // 初始化只读 provider
+    function initReadProvider() {
+      if (RPC_URL) {
+        readProvider = new ethers.JsonRpcProvider(RPC_URL);
+      } else if (window.ethereum) {
+        readProvider = new ethers.BrowserProvider(window.ethereum);
+      }
+      if (readProvider) {
+        escrowRead = new ethers.Contract(ESCROW_ADDR, ESCROW_ABI, readProvider);
+        sbtRead = new ethers.Contract(SBT_ADDR, SBT_ABI, readProvider);
+      }
+    }
+
+    // 检查钱包 & SBT 资格
+    async function checkWalletStatus() {
+      const panel = document.getElementById("wallet-status");
+      let lines = [];
+
+      // 1. MetaMask 检查
+      if (!window.ethereum) {
+        panel.innerHTML = '<div class="flash error"><i class="fa-solid fa-xmark"></i> 未检测到 MetaMask，请先安装浏览器插件。</div>';
+        return;
+      }
+      lines.push('<div>✅ MetaMask 已安装</div>');
+
+      try {
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const accounts = await provider.send("eth_accounts", []);
+        if (accounts.length === 0) {
+          lines.push('<div class="flash info" style="margin:.5rem 0;"><i class="fa-solid fa-link-slash"></i> MetaMask 未连接。请点击导航栏「连接 MetaMask」后刷新此页面。</div>');
+          panel.innerHTML = lines.join("");
+          return;
+        }
+
+        // 2. 网络检查
+        const network = await provider.getNetwork();
+        const chainOk = Number(network.chainId) === CHAIN_ID;
+        if (!chainOk) {
+          lines.push(`<div class="flash error" style="margin:.5rem 0;"><i class="fa-solid fa-xmark"></i> 当前网络 Chain ID: ${network.chainId}，请切换到 Sepolia（${CHAIN_ID}）</div>`);
+          panel.innerHTML = lines.join("");
+          return;
+        }
+        lines.push('<div>✅ 已连接 Sepolia 测试网</div>');
+
+        // 3. 地址
+        const signer = await provider.getSigner();
+        voterAddr = signer.address;
+        lines.push(`<div>✅ 当前钱包: <code style="font-size:.85rem;">${voterAddr}</code></div>`);
+
+        // 4. Gold SBT 检查
+        if (sbtRead) {
+          try {
+            const sbtData = await sbtRead.getSBT(voterAddr);
+            const tokenId = Number(sbtData[0]);
+            const tier = Number(sbtData[1]);
+            const tierNames = ["无", "铜牌", "银牌", "金牌"];
+
+            if (tokenId === 0) {
+              lines.push('<div class="flash error" style="margin:.5rem 0;"><i class="fa-solid fa-xmark"></i> 您当前未持有 SBT。投票需要 <strong>金牌 SBT</strong>。请先到个人主页铸造。</div>');
+              panel.innerHTML = lines.join("");
+              return;
+            }
+            if (tier < 3) {
+              lines.push(`<div class="flash error" style="margin:.5rem 0;"><i class="fa-solid fa-xmark"></i> 您的 SBT 等级为 ${tierNames[tier]}，投票需要 <strong>金牌 SBT</strong>（信誉 ≥ 80）。</div>`);
+              panel.innerHTML = lines.join("");
+              return;
+            }
+            lines.push('<div>✅ 持有金牌 SBT — 具备投票资格</div>');
+            hasGold = true;
+            walletReady = true;
+          } catch(e) {
+            lines.push('<div class="flash info" style="margin:.5rem 0;">⚠️ 无法查询 SBT 状态，投票可能失败</div>');
+            walletReady = true; // 允许尝试
+          }
+        }
+      } catch (e) {
+        lines.push(`<div class="flash error" style="margin:.5rem 0;">连接 MetaMask 失败: ${e.message}</div>`);
+      }
+      panel.innerHTML = lines.join("");
+    }
+
+    // 加载每个争议的链上信息
+    async function loadDisputeInfo(taskId) {
+      const el = document.getElementById("dispute-" + taskId);
+      if (!escrowRead) {
+        el.innerHTML = '<span class="flash info">无法连接链上合约</span>';
+        return;
+      }
+
+      try {
+        const d = await escrowRead.getEscrow(taskId);
+        const requester = d[0];
+        const helper = d[1];
+        const amount = ethers.formatEther(d[2]);
+        const status = Number(d[3]);
+        const votesHelper = Number(d[6]);
+        const votesRequester = Number(d[7]);
+        const statusNames = ["不存在", "已锁定", "已完成", "争议中", "已裁决"];
+
+        let html = '';
+
+        // 链上争议详情
+        html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.5rem;margin-bottom:.75rem;">';
+        html += `<div><span class="muted">链上状态</span><br><span class="badge ${status===3?'rejected':'completed'}">${statusNames[status]}</span></div>`;
+        html += `<div><span class="muted">托管金额</span><br><strong>${amount} ETH</strong></div>`;
+        html += `<div><span class="muted">当前票数</span><br>打款: <strong>${votesHelper}</strong> / 退款: <strong>${votesRequester}</strong>（阈值: ${VOTE_THRESH}）</div>`;
+        html += '</div>';
+        html += '<div style="font-size:.85rem;margin-bottom:.75rem;">';
+        html += `<span class="muted">求助者地址:</span> <code>${requester.slice(0,8)}...${requester.slice(-6)}</code> · `;
+        html += `<span class="muted">帮助者地址:</span> <code>${helper.slice(0,8)}...${helper.slice(-6)}</code>`;
+        html += '</div>';
+
+        if (status === 4 || status === 2) {
+          // 链上已裁决/完成 → 自动同步后端 DB
+          try {
+            await fetch("/api/escrow/sync", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ task_id: taskId, action: "resolve", tx_hash: "" }),
+            });
+          } catch(e) { /* ignore */ }
+          const winner = votesHelper >= votesRequester ? '打款给帮助者' : '退款给求助者';
+          html += `<div class="flash success">✅ 此争议已裁决：<strong>${winner}</strong>，资金已自动划转。</div>`;
+          el.innerHTML = html;
+          // 标记卡片为已解决，稍后隐藏
+          el.closest('.card').style.opacity = '0.6';
+          return;
+        }
+
+        if (status !== 3) {
+          html += `<div class="flash info">链上状态非争议中（${statusNames[status]}），无法投票。</div>`;
+          el.innerHTML = html;
+          return;
+        }
+
+        // 投票资格检查
+        if (!walletReady) {
+          html += '<div class="flash info">请先完成上方钱包资格检查后，才能投票。</div>';
+          el.innerHTML = html;
+          return;
+        }
+
+        // 是否是当事人
+        if (voterAddr && (voterAddr.toLowerCase() === requester.toLowerCase() || voterAddr.toLowerCase() === helper.toLowerCase())) {
+          html += '<div class="flash error"><i class="fa-solid fa-ban"></i> 您是此争议的当事人，无法投票。</div>';
+          el.innerHTML = html;
+          return;
+        }
+
+        // 是否已投票
+        if (voterAddr && escrowRead) {
+          try {
+            const myVote = await escrowRead.getVote(taskId, voterAddr);
+            const v = Number(myVote);
+            if (v !== 0) {
+              const voteLabel = v === 1 ? '支持打款' : '支持退款';
+              html += `<div class="flash success"><i class="fa-solid fa-check-double"></i> 您已投票: <strong>${voteLabel}</strong></div>`;
+              el.innerHTML = html;
+              return;
+            }
+          } catch(e) { /* ignore */ }
+        }
+
+        // 显示投票按钮
+        html += '<div style="display:flex;gap:.5rem;flex-wrap:wrap;">';
+        html += `<button class="btn" onclick="castVote(${taskId}, 1)"><i class="fa-solid fa-check"></i> 支持打款给帮助者</button>`;
+        html += `<button class="btn danger" onclick="castVote(${taskId}, 2)"><i class="fa-solid fa-rotate-left"></i> 支持退款给求助者</button>`;
+        html += '</div>';
+
+        el.innerHTML = html;
+      } catch(e) {
+        console.error("loadDisputeInfo error:", e);
+        el.innerHTML = '<span class="flash info">无法加载链上状态: ' + e.message + '</span>';
+      }
+    }
+
+    // 投票
+    async function castVote(taskId, choice) {
+      const choiceLabel = choice === 1 ? "支持打款给帮助者" : "支持退款给求助者";
+      if (!confirm(`确认对任务 #${taskId} 投票「${choiceLabel}」？\n此操作不可撤销，将消耗少量 Gas。`)) return;
+
+      try {
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const signer = await provider.getSigner();
+        const contract = new ethers.Contract(ESCROW_ADDR, ESCROW_ABI, signer);
+
+        const tx = await contract.voteOnDispute(taskId, choice);
+        alert("交易已提交，等待确认...\nTx: " + tx.hash);
+        await tx.wait();
+
+        // 等待链上确认后查询最新状态
+        const data = await escrowRead.getEscrow(taskId);
+        const newStatus = Number(data[3]);
+
+        // 同步后端 DB
+        if (newStatus === 4 || newStatus === 2) {
+          await fetch("/api/escrow/sync", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ task_id: taskId, action: "resolve", tx_hash: tx.hash }),
+          });
+          alert("投票成功！争议已裁决，资金已自动划转。");
+        } else {
+          await fetch("/api/escrow/sync", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ task_id: taskId, action: "dispute", tx_hash: tx.hash }),
+          });
+          alert("投票成功！等待更多仲裁员投票。");
+        }
+        location.reload();
+      } catch (err) {
+        console.error("castVote error:", err);
+        const reason = err.reason || err.message || "";
+        if (reason.includes("Gold SBT")) {
+          alert("投票失败：您的钱包地址未持有金牌 SBT。\n\n请确保：\n1. MetaMask 当前地址已在个人主页铸造过 SBT\n2. 信誉分 ≥ 80");
+        } else if (reason.includes("parties cannot vote")) {
+          alert("投票失败：争议当事人不能参与投票。");
+        } else if (reason.includes("already voted")) {
+          alert("投票失败：您已经投过票了。");
+        } else {
+          alert("投票失败: " + reason);
+        }
+      }
+    }
+
+    // 页面加载
+    document.addEventListener("DOMContentLoaded", async function() {
+      initReadProvider();
+      await checkWalletStatus();
+      for (const tid of TASK_IDS) {
+        await loadDisputeInfo(tid);
+      }
+    });
+
+    // 每 15 秒自动刷新链上状态
+    setInterval(async function() {
+      if (!escrowRead || TASK_IDS.length === 0) return;
+      for (const tid of TASK_IDS) {
+        try {
+          const d = await escrowRead.getEscrow(tid);
+          const s = Number(d[3]);
+          if (s === 4 || s === 2) {
+            // 链上已解决，同步后端并刷新页面
+            await fetch("/api/escrow/sync", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ task_id: tid, action: "resolve", tx_hash: "" }),
+            });
+            location.reload();
+            return;
+          }
+        } catch(e) { /* ignore */ }
+      }
+      // 更新票数显示
+      for (const tid of TASK_IDS) {
+        await loadDisputeInfo(tid);
+      }
+    }, 15000);
+  </script>
+{% endblock %}

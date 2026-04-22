@@ -54,6 +54,34 @@
       </div>
     </div>
     <div class="card" style="margin-top:1rem;">
+      <h3><i class="fa-solid fa-id-badge"></i> 灵魂绑定代币 (SBT)</h3>
+      <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
+        <span>链上 SBT 状态：</span>
+        <span id="sbt-status">
+          {% if profile_user.wallet_link and profile_user.wallet_link.address %}
+            <span class="muted">加载中...</span>
+          {% else %}
+            <span class="badge pending">未绑定钱包</span>
+          {% endif %}
+        </span>
+      </div>
+      {% if current_user.is_authenticated and current_user.id == profile_user.id and profile_user.reputation_score >= 20 and profile_user.wallet_link %}
+        <div class="actions" style="margin-top:.75rem;">
+          <button class="btn" onclick="mintSBT()"><i class="fa-solid fa-stamp"></i> 申领 / 升级 SBT</button>
+        </div>
+      {% endif %}
+      {% if profile_user.wallet_link and profile_user.wallet_link.address %}
+        <script>
+          document.addEventListener("DOMContentLoaded", function() {
+            if (typeof loadSBTStatus === "function") {
+              loadSBTStatus("{{ profile_user.wallet_link.address }}", "sbt-status");
+            }
+          });
+        </script>
+      {% endif %}
+    </div>
+
+    <div class="card" style="margin-top:1rem;">
       <h3>链上信誉证明</h3>
       {% if latest_reputation_anchor %}
         <p class="muted">最近上链时间：{{ latest_reputation_anchor.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</p>

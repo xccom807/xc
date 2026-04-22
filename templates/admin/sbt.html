@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+{% block content %}
+  <section class="admin-card">
+    <h2><i class="fa-solid fa-id-badge"></i> SBT 信誉代币管理</h2>
+    <p class="muted">查看合格用户列表，生成 Merkle Root 并上链至 ReputationSBT 合约。</p>
+
+    {% if sbt_address %}
+      <p>合约地址：<code>{{ sbt_address }}</code></p>
+    {% else %}
+      <div class="flash error">尚未配置 SBT_CONTRACT_ADDRESS，请先部署合约并在 config.py 中填入地址。</div>
+    {% endif %}
+
+    {% if tree %}
+      <div class="admin-stats" style="margin:1rem 0;">
+        <div class="stat"><div class="num">{{ entries|length }}</div><div class="label">合格用户</div></div>
+        <div class="stat"><div class="num" style="font-size:.9rem;word-break:break-all;">{{ tree.root_hex[:18] }}...</div><div class="label">当前 Merkle Root</div></div>
+      </div>
+
+      <h3>合格用户列表（信誉≥20 且已绑定钱包）</h3>
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>用户名</th>
+            <th>钱包地址</th>
+            <th>信誉分</th>
+            <th>等级</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for e in entries %}
+            <tr>
+              <td><a href="{{ url_for('profile_view', username=e.username) }}">{{ e.username }}</a></td>
+              <td style="font-family:monospace;font-size:.8rem;">{{ e.address[:10] }}...{{ e.address[-6:] }}</td>
+              <td>{{ e.score }}</td>
+              <td>
+                {% if e.score >= 80 %}
+                  <span class="badge completed">🥇 金牌</span>
+                {% elif e.score >= 50 %}
+                  <span class="badge accepted">🥈 银牌</span>
+                {% else %}
+                  <span class="badge pending">🥉 铜牌</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <form method="post" style="margin-top:1rem;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn" type="submit" onclick="return confirm('确认生成 Merkle Root 并上链？将消耗 Gas。');">
+          <i class="fa-solid fa-upload"></i> 生成 Merkle Root 并上链
+        </button>
+        <a class="btn secondary" href="{{ url_for('admin') }}">返回</a>
+      </form>
+    {% else %}
+      <div class="flash info">暂无满足条件的用户（需信誉≥20 且已绑定钱包）。</div>
+      <a class="btn secondary" href="{{ url_for('admin') }}">返回</a>
+    {% endif %}
+
+    {% if result and result.success %}
+      <div class="flash success" style="margin-top:1rem;">
+        上链成功！Root: <code>{{ result.root }}</code><br>
+        Tx: <a href="{{ config.ETH_EXPLORER_TX_BASE_URL }}/{{ result.tx_hash }}" target="_blank">{{ result.tx_hash[:20] }}...</a>
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}

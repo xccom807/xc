@@ -35,10 +35,10 @@
             <a href="{{ url_for('search_page') }}"><i class="fa-solid fa-magnifying-glass"></i> 搜索</a>
             <a href="{{ url_for('leaderboard') }}"><i class="fa-solid fa-ranking-star"></i> 排行榜</a>
             <a href="{{ url_for('chatbot') }}"><i class="fa-solid fa-robot"></i> 智能助手</a>
-            <a href="javascript:void(0)" class="wallet-connect" id="connectMetaMaskBtn" onclick="connectMetaMaskNav()"><i class="fa-solid fa-wallet"></i> 连接 MetaMask</a>
           {% endif %}
           {% if current_user.is_authenticated %}
             {% if current_user.user_type != 'admin' %}
+              <a href="javascript:void(0)" class="wallet-connect" id="connectMetaMaskBtn" onclick="connectMetaMaskNav()"><i class="fa-solid fa-wallet"></i> 连接 MetaMask</a>
               <a href="{{ url_for('dashboard') }}"><i class="fa-solid fa-gauge"></i> 仪表盘</a>
               <a href="{{ url_for('messages_inbox') }}" class="nav-notification">
                 <i class="fa-regular fa-envelope"></i> 私信
@@ -53,6 +53,9 @@
                   <span class="notification-badge">{{ unread_notifications }}</span>
                 {% endif %}
               </a>
+              {% if current_user.reputation_score >= 80 %}
+                <a href="{{ url_for('arbitration_hall') }}"><i class="fa-solid fa-gavel"></i> 仲裁大厅</a>
+              {% endif %}
             {% endif %}
             <a href="{{ url_for('logout') }}"><i class="fa-solid fa-right-from-bracket"></i> 退出</a>
           {% else %}
@@ -92,6 +95,8 @@
     </footer>
 
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@6.9.0/dist/ethers.umd.min.js"></script>
+    <script src="{{ url_for('static', filename='js/web3-integration.js') }}"></script>
     <script>
     async function connectMetaMaskNav() {
       if (typeof window.ethereum === 'undefined' || !window.ethereum.isMetaMask) {

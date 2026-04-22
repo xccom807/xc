@@ -34,6 +34,11 @@ class Config:
     # Internal blockchain batching (number of statements per block)
     BLOCK_SIZE = int(os.environ.get("BLOCK_SIZE", "10"))
 
+    # Smart Contracts (deployed on Sepolia)
+    SBT_CONTRACT_ADDRESS = os.environ.get("SBT_CONTRACT_ADDRESS", "0xC80713Ae1aB233BB29b9991a80BA7594f5C128F3")
+    ESCROW_CONTRACT_ADDRESS = os.environ.get("ESCROW_CONTRACT_ADDRESS", "0x90413AfD18C53172d09caD650FB5Fd80b7154002")
+    DAO_VOTE_THRESHOLD = int(os.environ.get("DAO_VOTE_THRESHOLD", "1"))  # 测试环境默认 1 票
+
     # Kimi (Moonshot) AI chatbot
     KIMI_API_KEY = os.environ.get("KIMI_API_KEY", "sk-Da4SeV8pnNnM2J1FrBgv7b9C1pPBLjqI0k6HXWPc8d6gwRaT")
     KIMI_MODEL = os.environ.get("KIMI_MODEL", "moonshot-v1-8k")
