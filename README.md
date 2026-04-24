@@ -1,6 +1,6 @@
 # Kaspersky-519-WT-05（每日互助 / DailyHelper）
 
-![Tests](https://github.com/YOUR_USERNAME/Kaspersky-519-WT-05-main/actions/workflows/test.yml/badge.svg)
+![Tests](https://github.com/xccom807/Kaspersky-519-WT-05-main/actions/workflows/test.yml/badge.svg)
 
 一个基于 **Flask + 区块链** 的社区互助平台。用户可以发布求助、提交帮助提议、完成任务后通过链上支付结算并互评，所有关键操作均记录在内部审计链并可锚定至以太坊 Sepolia 测试网。
 
