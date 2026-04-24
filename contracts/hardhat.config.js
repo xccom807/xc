@@ -1,6 +1,8 @@
 require("@nomicfoundation/hardhat-toolbox");
+require("dotenv").config({ path: "../.env" });
 
-const PRIVATE_KEY = process.env.ETH_SIGNER_PRIVATE_KEY || "d0863861c64d330cfcc228d6dd79e51ff9d10e0728976c8472e90f2191235a0f";
+// 仅在部署到 Sepolia 时需要真实私钥，本地测试使用 Hardhat 内置账号
+const PRIVATE_KEY = process.env.ETH_SIGNER_PRIVATE_KEY || "0000000000000000000000000000000000000000000000000000000000000001";
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
@@ -21,7 +23,7 @@ module.exports = {
   },
   networks: {
     sepolia: {
-      url: process.env.ETH_RPC_URL || "https://sepolia.infura.io/v3/78fe51a047cc4283a879c99a59cdc09e",
+      url: process.env.ETH_RPC_URL || "",
       accounts: [`0x${PRIVATE_KEY}`],
     },
   },

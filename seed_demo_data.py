@@ -9,13 +9,13 @@ Admin: admin / admin123
 """
 
 import math
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app import create_app
 from extensions import db
 from models import (
     User, HelpRequest, HelpOffer, Review, Payment,
-    Message, Notification, NGO, Flag, WalletLink,
+    Message, Notification, Flag, WalletLink,
 )
 
 
@@ -38,7 +38,7 @@ def seed():
             print("Demo data already exists. Delete instance/app.db to re-seed.")
             return
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         # 1. Admin
         admin = User.query.filter_by(user_type="admin").first()
@@ -193,20 +193,7 @@ def seed():
                              created_at=now - timedelta(days=days))
             db.session.add(n)
 
-        # 9. NGOs
-        ngo1 = NGO(name="Green Earth Foundation", category="Environment",
-                    description="Dedicated to urban greening and environmental education.",
-                    location="Beijing", contact_email="info@greenearth.org",
-                    website="https://greenearth.org", verified_status=True,
-                    created_at=now - timedelta(days=40))
-        ngo2 = NGO(name="Youth Coding Initiative", category="Education",
-                    description="Teaching programming to underprivileged youth.",
-                    location="Shanghai", contact_email="hello@youthcode.cn",
-                    website="https://youthcode.cn", verified_status=False,
-                    created_at=now - timedelta(days=10))
-        db.session.add_all([ngo1, ngo2])
-
-        # 10. Flag (pending for admin to review)
+        # 9. Flag (pending for admin to review)
         flag = Flag(content_type="request", content_id=req4.id,
                     reason="Suspicious pricing, might be a scam.", status="pending",
                     created_at=now - timedelta(days=3))

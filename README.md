@@ -1,5 +1,7 @@
 # Kaspersky-519-WT-05（每日互助 / DailyHelper）
 
+![Tests](https://github.com/YOUR_USERNAME/Kaspersky-519-WT-05-main/actions/workflows/test.yml/badge.svg)
+
 一个基于 **Flask + 区块链** 的社区互助平台。用户可以发布求助、提交帮助提议、完成任务后通过链上支付结算并互评，所有关键操作均记录在内部审计链并可锚定至以太坊 Sepolia 测试网。
 
 ## 目录
@@ -24,7 +26,7 @@
 
 | 层面 | 技术 |
 |---|---|
-| **后端框架** | Flask 3.x（应用工厂 `create_app()`） |
+| **后端框架** | Flask 3.x（应用工厂 `create_app()` + 8 个 Blueprint 模块） |
 | **数据库** | Flask-SQLAlchemy + SQLite（默认） |
 | **用户认证** | Flask-Login + Flask-WTF（CSRF 全局保护） |
 | **区块链** | 内部审计链（Block/Statement 哈希链） + web3.py（Sepolia 锚定） |
@@ -46,18 +48,19 @@
         │            │            │              │
         ▼            ▼            ▼              ▼
 ┌─────────────────────────────────────────────────────────┐
-│                    Flask 应用 (app.py)                    │
+│         Flask 应用 (app.py + 8 个 Blueprint)              │
 │                                                          │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────────┐  │
-│  │ 用户认证  │ │ 任务管理  │ │ Escrow   │ │ SBT/信誉   │  │
-│  │ 注册/登录 │ │ CRUD     │ │ 资金托管  │ │ Merkle Tree │  │
-│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └─────┬──────┘  │
-│       │            │            │              │          │
-│       ▼            ▼            ▼              ▼          │
+│  ┌────────────────────────────────────────────────────┐  │
+│  │ routes/                                            │  │
+│  │  auth.py │ main.py │ features.py │ admin.py        │  │
+│  │  profile.py │ messages.py │ blockchain.py │ api.py │  │
+│  └────┬─────────────┬─────────────┬───────────┬──────┘  │
+│       │             │             │            │          │
+│       ▼             ▼             ▼            ▼          │
 │  ┌────────────────────────────────────────────────────┐  │
 │  │            SQLAlchemy ORM (models.py)               │  │
 │  │  User | HelpRequest | HelpOffer | Review | Payment  │  │
-│  │  Message | Notification | NGO | Flag | Block | ...   │  │
+│  │  Message | Notification | Flag | Block | Statement   │  │
 │  └──────────────────────┬─────────────────────────────┘  │
 │                         │                                 │
 │  ┌──────────────────────▼─────────────────────────────┐  │
@@ -162,32 +165,28 @@
 - **志愿专区** (`/volunteer`)：专属筛选仅志愿类型的求助，支持分类/地点/日期筛选
 - **附近的人** (`/nearby`)：基于 Haversine 公式计算距离，按半径/信誉/技能筛选附近用户
 
-### 9. 公益组织
-- **组织列表** (`/ngos`)：查看所有已认证的公益组织
-- **提交组织** (`/ngos/submit`)：提交新公益组织申请，等待管理员审核
-
-### 10. 举报系统
+### 9. 举报系统
 - 举报对象：用户、求助、评价
 - 填写举报原因，提交后进入管理员审核队列
 
-### 11. AI 智能助手
+### 10. AI 智能助手
 - **聊天页面** (`/chatbot`)：与 AI 助手"小美"对话
 - **API 接口** (`/api/chatbot`)：调用 Kimi (Moonshot) API，保留最近 10 轮上下文
 
-### 12. 钱包与 Web3
+### 11. 钱包与 Web3
 - **连接 MetaMask** (`/connect-wallet`)：绑定以太坊钱包到用户账号
 - **钱包验证**：challenge-response 签名验证协议（防伪造）
 - **我的钱包** (`/my-wallets`)：查看已绑定钱包列表
 - **Web3 状态** (`/web3`)：查看 Sepolia 链连接状态、查询地址余额、手动上链
 
-### 13. 灵魂绑定代币 (SBT)
+### 12. 灵魂绑定代币 (SBT)
 - **Merkle Proof Mint**：信誉分≥20 且已绑定钱包的用户，可在个人主页免费铸造 SBT
 - **三级等级**：🥉 铜牌（≥20）→ 🥈 银牌（≥50）→ 🥇 金牌（≥80）
 - **自动升级**：信誉提升后可重新申领升级
 - **链上查看**：个人主页自动显示链上 SBT 等级
 - **不可转让**：合约禁止 transfer（灵魂绑定）
 
-### 14. DAO 社区仲裁
+### 13. DAO 社区仲裁
 - **仲裁大厅** (`/arbitration`)：信誉分≥80 的金牌用户导航栏自动解锁入口
 - **争议列表**：展示所有 Disputed 状态的任务
 - **链上投票**：唤起 MetaMask 调用 TaskEscrow.voteOnDispute（支持打款 / 支持退款）
@@ -218,7 +217,6 @@
 
 ### 4. 举报审核 (`/admin/moderation`)
 - **举报处理**：查看待处理举报，通过（自动惩罚违规内容）或驳回
-- **NGO 认证**：审核待认证的公益组织申请，一键认证通过
 
 ### 5. 支付记录 (`/admin/payments`)
 - 查看所有支付记录（求助者→帮助者、金额、收款地址、交易哈希、状态）
@@ -268,7 +266,7 @@ User ──────┬──> HelpRequest ──> HelpOffer ──> Review
            ├──> Notification (通知)
            └──> Statement ──> Block (内部区块链)
 
-独立模型：NGO、Flag、PasswordResetToken
+独立模型：Flag、PasswordResetToken
 ```
 
 | 模型 | 说明 |
@@ -283,7 +281,6 @@ User ──────┬──> HelpRequest ──> HelpOffer ──> Review
 | `WalletLink` | MetaMask 钱包绑定 |
 | `Block` | 内部区块链区块 |
 | `Statement` | 区块链审计日志条目 |
-| `NGO` | 公益组织 |
 | `Flag` | 举报记录 |
 | `PasswordResetToken` | 密码重置令牌 |
 
@@ -291,10 +288,10 @@ User ──────┬──> HelpRequest ──> HelpOffer ──> Review
 
 ```text
 Kaspersky-519-WT-05-main/
-├─ app.py                    # Flask 应用入口与全部路由（约 2700 行）
+├─ app.py                    # Flask 应用工厂 + Blueprint 注册 + 端点别名兼容
 ├─ config.py                 # 环境配置（SECRET_KEY、DB、Web3、日志等）
-├─ models.py                 # 数据模型（13 个模型类）
-├─ forms.py                  # WTForms 表单定义（11 个表单类）
+├─ models.py                 # 数据模型（12 个模型类）
+├─ forms.py                  # WTForms 表单定义（15 个表单类）
 ├─ extensions.py             # db / login_manager / csrf 扩展实例
 ├─ blockchain_service.py     # 内部审计链写入与封块逻辑
 ├─ web3_service.py           # Web3 客户端初始化与链上锚定
@@ -302,6 +299,18 @@ Kaspersky-519-WT-05-main/
 ├─ create_admin.py           # 创建默认管理员账号
 ├─ merkle_service.py         # Merkle Tree 生成 + Proof 查询 + 上链
 ├─ seed_demo_data.py         # 灌入演示数据（答辩用）
+├─ routes/                   # ← 8 个 Blueprint 模块
+│  ├─ auth.py               #   注册/登录/密码重置
+│  ├─ main.py               #   首页/仪表盘/搜索/排行榜/志愿/附近
+│  ├─ features.py           #   任务发布/市场/帮助/详情/评价/举报
+│  ├─ admin.py              #   管理后台全功能
+│  ├─ profile.py            #   个人主页/编辑/头像
+│  ├─ messages.py           #   私信收件箱/聊天
+│  ├─ blockchain.py         #   区块浏览器/信誉锚定
+│  ├─ api.py                #   钱包/SBT/Escrow/AI 聊天
+│  └─ helpers.py            #   共享工具函数
+├─ tests/                    # ← 测试套件
+│  └─ test_routes.py        #   100 个 pytest 集成测试
 ├─ contracts/                # Hardhat 智能合约项目
 │  ├─ src/
 │  │  ├─ ReputationSBT.sol     #   灵魂绑定信誉代币 (ERC-721 SBT)
@@ -315,7 +324,7 @@ Kaspersky-519-WT-05-main/
 ├─ templates/                # Jinja2 页面模板
 │  ├─ base.html              #   全局基础模板（导航栏、角色隔离、Ethers.js CDN）
 │  ├─ auth/                  #   注册 / 登录 / 密码重置
-│  ├─ features/              #   求助 / 帮助 / 市场 / 详情 / NGO / 志愿 / 仲裁大厅
+│  ├─ features/              #   求助 / 帮助 / 市场 / 详情 / 志愿 / 仲裁大厅
 │  ├─ admin/                 #   管理后台（首页 / 用户 / 求助 / 审核 / 支付 / 公告 / SBT）
 │  ├─ blockchain/            #   区块浏览器
 │  ├─ messages/              #   私信收件箱 / 聊天
@@ -412,7 +421,6 @@ python app.py
 - **6 个钱包绑定**（alice/bob/charlie + 3 个专家，可测试 SBT Mint）
 - **私信对话**（alice 与 bob 之间的任务沟通消息）
 - **1 个已完成的支付记录**（含收款地址和交易哈希）
-- **2 个 NGO**（1 个已认证、1 个待审核）
 - **1 条举报**（待管理员处理）
 
 ## 配置说明
@@ -452,7 +460,6 @@ python app.py
 | `/search` | 全局搜索（求助 + 用户） |
 | `/leaderboard` | 排行榜（信誉/帮助/完成三维排行） |
 | `/volunteer` | 志愿专区 |
-| `/ngos` | 公益组织列表 |
 | `/u/<username>` | 用户公开主页 |
 | `/chatbot` | AI 智能助手 |
 | `/web3` | Web3 连接状态 / 手动上链 |
@@ -474,7 +481,6 @@ python app.py
 | `/notifications/read-all` | 一键全部已读 |
 | `/settings/profile` | 编辑个人资料 |
 | `/nearby` | 附近的人 |
-| `/ngos/submit` | 提交公益组织申请 |
 | `/flag` | 举报（用户/求助/评价） |
 | `/connect-wallet` | 绑定 MetaMask 钱包 |
 | `/my-wallets` | 我的钱包列表 |
@@ -489,7 +495,7 @@ python app.py
 | `/admin` | 管理后台首页（总览统计 + 所有功能入口） |
 | `/admin/users` | 用户管理（搜索 / 拉黑 / 删除） |
 | `/admin/requests` | 求助管理（搜索 / 筛选 / 关闭任务） |
-| `/admin/moderation` | 举报审核 + NGO 认证 |
+| `/admin/moderation` | 举报审核 |
 | `/admin/payments` | 支付记录查看 |
 | `/admin/broadcast` | 发布公告（群发站内通知） |
 | `/admin/export/users` | 导出用户数据 CSV |
@@ -552,7 +558,7 @@ python app.py
 20. 管理后台首页：展示统计数据 + 功能入口
 21. 求助管理：查看所有求助，演示关闭任务
 22. 用户管理：演示拉黑/解黑
-23. 举报审核：处理举报 + NGO 认证
+23. 举报审核：处理举报
 24. 支付记录：查看链上支付详情
 25. 发布公告：群发站内通知
 26. 数据导出：下载 CSV 文件

@@ -1,6 +1,6 @@
 import json
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from flask import current_app
@@ -106,7 +106,7 @@ def maybe_seal_block(limit: Optional[int] = None) -> Optional[Block]:
         return None
 
     index, prev_hash = _get_next_index_and_prev_hash()
-    created_at = datetime.utcnow()
+    created_at = datetime.now(timezone.utc)
     digest = _calc_block_hash(index, prev_hash, unsealed, created_at)
 
     block = Block(index=index, prev_hash=prev_hash, hash=digest, created_at=created_at)

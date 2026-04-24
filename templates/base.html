@@ -98,54 +98,121 @@
     <script src="https://cdn.jsdelivr.net/npm/ethers@6.9.0/dist/ethers.umd.min.js"></script>
     <script src="{{ url_for('static', filename='js/web3-integration.js') }}"></script>
     <script>
-    async function connectMetaMaskNav() {
-      if (typeof window.ethereum === 'undefined' || !window.ethereum.isMetaMask) {
-        alert('未检测到 MetaMask，请先安装 MetaMask 浏览器扩展。');
-        window.open('https://metamask.io/download/', '_blank');
-        return;
-      }
-      try {
-        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-        if (!accounts || !accounts.length) { alert('未返回钱包账户。'); return; }
-        const address = accounts[0];
-        const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+    (function () {
+      const STORAGE_KEY = 'dh_wallet_connected';
+      const POLL_INTERVAL = 30000; // 30s
 
-        const challengeRes = await fetch('/wallet/challenge', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ address })
-        });
-        const challengeData = await challengeRes.json();
-        if (!challengeRes.ok || !challengeData.ok) {
-          alert(challengeData.error || '验证挑战创建失败');
-          return;
-        }
-
-        const signature = await window.ethereum.request({
-          method: 'personal_sign',
-          params: [challengeData.message, address]
-        });
-
-        const verifyRes = await fetch('/wallet/verify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ address, signature, chain_id: chainId })
-        });
-        const verifyData = await verifyRes.json();
-        if (!verifyRes.ok || !verifyData.ok) {
-          alert(verifyData.error || '签名验证失败');
-          return;
-        }
-
+      /* ── UI helper ────────────────────────────────── */
+      function _updateBtn(address) {
         const btn = document.getElementById('connectMetaMaskBtn');
-        if (btn) {
-          btn.innerHTML = '<i class="fa-solid fa-check"></i> 已连接: ' + address.substring(0, 6) + '...' + address.substring(address.length - 4);
+        if (!btn) return;
+        if (address) {
+          btn.innerHTML = '<i class="fa-solid fa-check"></i> 已连接: '
+            + address.substring(0, 6) + '...' + address.substring(address.length - 4);
+          btn.onclick = null;
+        } else {
+          btn.innerHTML = '<i class="fa-solid fa-wallet"></i> 连接 MetaMask';
+          btn.onclick = connectMetaMaskNav;
         }
-      } catch (error) {
-        if (error && error.code === 4001) { return; }
-        alert('连接 MetaMask 失败: ' + (error.message || error));
       }
-    }
+
+      /* ── 1. Click handler: full challenge-sign-verify ── */
+      window.connectMetaMaskNav = async function () {
+        if (typeof window.ethereum === 'undefined' || !window.ethereum.isMetaMask) {
+          alert('未检测到 MetaMask，请先安装 MetaMask 浏览器扩展。');
+          window.open('https://metamask.io/download/', '_blank');
+          return;
+        }
+        try {
+          const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+          if (!accounts || !accounts.length) { alert('未返回钱包账户。'); return; }
+          const address = accounts[0];
+          const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+
+          const challengeRes = await fetch('/wallet/challenge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ address })
+          });
+          const challengeData = await challengeRes.json();
+          if (!challengeRes.ok || !challengeData.ok) {
+            alert(challengeData.error || '验证挑战创建失败');
+            return;
+          }
+
+          const signature = await window.ethereum.request({
+            method: 'personal_sign',
+            params: [challengeData.message, address]
+          });
+
+          const verifyRes = await fetch('/wallet/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ address, signature, chain_id: chainId })
+          });
+          const verifyData = await verifyRes.json();
+          if (!verifyRes.ok || !verifyData.ok) {
+            alert(verifyData.error || '签名验证失败');
+            return;
+          }
+
+          localStorage.setItem(STORAGE_KEY, address);
+          _updateBtn(address);
+        } catch (error) {
+          if (error && error.code === 4001) return;
+          alert('连接 MetaMask 失败: ' + (error.message || error));
+        }
+      };
+
+      /* ── 2. Eager connect: silent reconnect on page load ── */
+      async function _eagerConnect() {
+        if (!localStorage.getItem(STORAGE_KEY)) return;
+        if (typeof window.ethereum === 'undefined') return;
+        try {
+          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+          if (accounts && accounts.length) {
+            _updateBtn(accounts[0]);
+          } else {
+            localStorage.removeItem(STORAGE_KEY);
+          }
+        } catch (_) { /* silent */ }
+      }
+
+      /* ── 3. Periodic refresh: poll /wallet/me every 30s ── */
+      async function _pollWalletStatus() {
+        try {
+          const res = await fetch('/wallet/me');
+          if (!res.ok) return;
+          const data = await res.json();
+          if (data.verified && data.address) {
+            localStorage.setItem(STORAGE_KEY, data.address);
+            _updateBtn(data.address);
+          } else {
+            localStorage.removeItem(STORAGE_KEY);
+            _updateBtn(null);
+          }
+        } catch (_) { /* silent */ }
+      }
+
+      /* ── 4. MetaMask event listeners ──────────────── */
+      if (typeof window.ethereum !== 'undefined') {
+        window.ethereum.on('accountsChanged', function (accounts) {
+          if (accounts.length) {
+            _updateBtn(accounts[0]);
+            localStorage.setItem(STORAGE_KEY, accounts[0]);
+          } else {
+            _updateBtn(null);
+            localStorage.removeItem(STORAGE_KEY);
+          }
+        });
+      }
+
+      /* ── Boot ────────────────────────────────────── */
+      document.addEventListener('DOMContentLoaded', function () {
+        _eagerConnect();
+        setInterval(_pollWalletStatus, POLL_INTERVAL);
+      });
+    })();
     </script>
     {% block scripts %}{% endblock %}
   </body>

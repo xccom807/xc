@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from flask_login import UserMixin
@@ -22,7 +22,7 @@ class User(UserMixin, db.Model):
     is_blacklisted = db.Column(db.Boolean, nullable=False, default=False)
     blacklist_reason = db.Column(db.String(300), nullable=True)
     reputation_score = db.Column(db.Float, nullable=False, default=0.0)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     # Profile
     bio = db.Column(db.Text, nullable=True)
     skills = db.Column(db.String(300), nullable=True)
@@ -61,8 +61,8 @@ class WalletLink(db.Model):
     challenge_nonce = db.Column(db.String(64), nullable=True)
     challenge_issued_at = db.Column(db.DateTime, nullable=True)
     verified_at = db.Column(db.DateTime, nullable=True)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     user = db.relationship("User", backref=db.backref("wallet_link", uselist=False))
 
@@ -85,7 +85,7 @@ class HelpRequest(db.Model):
     status = db.Column(
         db.String(20), nullable=False, default="open"
     )  # open/in_progress/completed/cancelled/disputed
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     user = db.relationship("User", back_populates="help_requests")
@@ -104,7 +104,7 @@ class HelpOffer(db.Model):
     helper_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     message = db.Column(db.Text, nullable=True)
     status = db.Column(db.String(20), nullable=False, default="pending")  # pending/accepted/rejected
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     request = db.relationship("HelpRequest", back_populates="offers")
@@ -123,7 +123,7 @@ class Review(db.Model):
     reviewee_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     rating = db.Column(db.Integer, nullable=False)
     comment = db.Column(db.Text, nullable=True)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     request = db.relationship("HelpRequest", back_populates="reviews")
@@ -140,9 +140,12 @@ class Flag(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     content_type = db.Column(db.String(50), nullable=False)  # request/review
     content_id = db.Column(db.Integer, nullable=False)
+    reporter_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     reason = db.Column(db.String(300), nullable=True)
     status = db.Column(db.String(20), nullable=False, default="pending")  # pending/approved/rejected
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    reporter = db.relationship("User", foreign_keys=[reporter_id])
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<Flag {self.content_type}:{self.content_id} {self.status}>"
@@ -159,7 +162,7 @@ class Block(db.Model):
     index = db.Column(db.Integer, nullable=False, unique=True)
     prev_hash = db.Column(db.String(128), nullable=True)
     hash = db.Column(db.String(128), nullable=False)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     statements = db.relationship("Statement", back_populates="block", lazy=True)
@@ -175,7 +178,7 @@ class Statement(db.Model):
     kind = db.Column(db.String(50), nullable=False)  # e.g., signup, login, logout, request_create
     payload = db.Column(db.JSON, nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # Block linkage (null until included in a block)
     block_id = db.Column(db.Integer, db.ForeignKey("blocks.id"), nullable=True, index=True)
@@ -195,7 +198,7 @@ class PasswordResetToken(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     token = db.Column(db.String(64), unique=True, nullable=False)
     used = db.Column(db.Boolean, nullable=False, default=False)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     user = db.relationship("User", backref="reset_tokens")
 
@@ -209,26 +212,10 @@ class Notification(db.Model):
     message = db.Column(db.String(300), nullable=False)
     link = db.Column(db.String(200), nullable=True)
     is_read = db.Column(db.Boolean, nullable=False, default=False)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     user = db.relationship("User", backref="notifications")
 
-
-class NGO(db.Model):
-    __tablename__ = "ngos"
-
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(200), nullable=False)
-    description = db.Column(db.Text, nullable=False)
-    category = db.Column(db.String(100), nullable=True)
-    location = db.Column(db.String(200), nullable=True)
-    contact_email = db.Column(db.String(200), nullable=True)
-    website = db.Column(db.String(300), nullable=True)
-    verified_status = db.Column(db.Boolean, nullable=False, default=False)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-
-    def __repr__(self) -> str:  # pragma: no cover
-        return f"<NGO {self.name} ({self.category})>"
 
 
 class Payment(db.Model):
@@ -242,7 +229,7 @@ class Payment(db.Model):
     amount = db.Column(db.Float, nullable=False)
     tx_hash = db.Column(db.String(66), nullable=True)
     status = db.Column(db.String(20), nullable=False, default="address_submitted")  # address_submitted / paid
-    address_submitted_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    address_submitted_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     paid_at = db.Column(db.DateTime, nullable=True)
 
     help_request = db.relationship("HelpRequest", backref=db.backref("payment", uselist=False))
@@ -261,7 +248,7 @@ class Message(db.Model):
     receiver_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     content = db.Column(db.Text, nullable=False)
     is_read = db.Column(db.Boolean, nullable=False, default=False)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     sender = db.relationship("User", foreign_keys=[sender_id], backref="sent_messages")
     receiver = db.relationship("User", foreign_keys=[receiver_id], backref="received_messages")

@@ -70,28 +70,6 @@ class OfferHelpForm(FlaskForm):
     submit = SubmitField("提交帮助")
 
 
-class NGOForm(FlaskForm):
-    name = StringField("公益组织名称", validators=[DataRequired(), Length(max=200)])
-    description = TextAreaField("描述", validators=[DataRequired(), Length(min=20)])
-    category = SelectField(
-        "分类",
-        choices=[
-            ("教育", "教育"),
-            ("医疗健康", "医疗健康"),
-            ("环境保护", "环境保护"),
-            ("扶贫", "扶贫"),
-            ("动物福利", "动物福利"),
-            ("妇女儿童", "妇女儿童"),
-            ("灾害救援", "灾害救援"),
-            ("其他", "其他"),
-        ],
-        validators=[Optional()],
-    )
-    location = StringField("所在地", validators=[Optional(), Length(max=200)])
-    contact_email = StringField("联系邮箱", validators=[Optional(), Email(), Length(max=200)])
-    website = StringField("网站", validators=[Optional(), Length(max=300)])
-    submit = SubmitField("提交审核")
-
 
 class ProfileForm(FlaskForm):
     full_name = StringField("全名", validators=[Optional(), Length(max=120)])

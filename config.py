@@ -1,6 +1,5 @@
 import os
 
-
 class Config:
     """Base configuration for the Flask application."""
 
@@ -20,10 +19,10 @@ class Config:
     LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
 
     # Web3 / Blockchain
-    ETH_RPC_URL = os.environ.get("ETH_RPC_URL", "https://sepolia.infura.io/v3/78fe51a047cc4283a879c99a59cdc09e")
+    ETH_RPC_URL = os.environ.get("ETH_RPC_URL", "")
     ETH_CHAIN_NAME = os.environ.get("ETH_CHAIN_NAME", "sepolia")
     ETH_CHAIN_ID = os.environ.get("ETH_CHAIN_ID", "11155111")
-    ETH_SIGNER_PRIVATE_KEY = os.environ.get("ETH_SIGNER_PRIVATE_KEY", "d0863861c64d330cfcc228d6dd79e51ff9d10e0728976c8472e90f2191235a0f")
+    ETH_SIGNER_PRIVATE_KEY = os.environ.get("ETH_SIGNER_PRIVATE_KEY", "")
     ETH_ANCHOR_TARGET_ADDRESS = os.environ.get("ETH_ANCHOR_TARGET_ADDRESS", "")
     ETH_ANCHOR_GAS_LIMIT = int(os.environ.get("ETH_ANCHOR_GAS_LIMIT", "120000"))
     ETH_GAS_PRICE_MULTIPLIER = float(os.environ.get("ETH_GAS_PRICE_MULTIPLIER", "1.0"))
@@ -40,5 +39,5 @@ class Config:
     DAO_VOTE_THRESHOLD = int(os.environ.get("DAO_VOTE_THRESHOLD", "1"))  # 测试环境默认 1 票
 
     # Kimi (Moonshot) AI chatbot
-    KIMI_API_KEY = os.environ.get("KIMI_API_KEY", "sk-Da4SeV8pnNnM2J1FrBgv7b9C1pPBLjqI0k6HXWPc8d6gwRaT")
+    KIMI_API_KEY = os.environ.get("KIMI_API_KEY", "")
     KIMI_MODEL = os.environ.get("KIMI_MODEL", "moonshot-v1-8k")
