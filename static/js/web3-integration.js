@@ -83,14 +83,35 @@ async function getSignerAndContracts() {
 
 // 通知后端同步状态
 async function syncEscrowStatus(taskId, action, txHash) {
-  try {
-    await fetch("/api/escrow/sync", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ task_id: taskId, action: action, tx_hash: txHash }),
-    });
-  } catch (e) {
-    console.error("Failed to sync escrow status:", e);
+  const resp = await fetch("/api/escrow/sync", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ task_id: taskId, action: action, tx_hash: txHash }),
+  });
+  if (!resp.ok) {
+    let message = "后端同步 Escrow 状态失败";
+    try {
+      const data = await resp.json();
+      message = data.error || message;
+    } catch (e) {
+      message = await resp.text();
+    }
+    throw new Error(message);
+  }
+  return await resp.json();
+}
+
+async function ensureVerifiedWalletMatchesSigner(signer) {
+  const resp = await fetch("/wallet/me");
+  if (!resp.ok) {
+    throw new Error("无法读取后端钱包绑定状态");
+  }
+  const wallet = await resp.json();
+  if (!wallet.verified || !wallet.address) {
+    throw new Error("请先在平台绑定并验证当前钱包，再进行 Escrow 操作");
+  }
+  if (wallet.address.toLowerCase() !== signer.address.toLowerCase()) {
+    throw new Error(`MetaMask 当前地址与平台已验证钱包不一致。\n当前地址: ${signer.address}\n已绑定地址: ${wallet.address}`);
   }
 }
 
@@ -198,14 +219,25 @@ async function createEscrow(taskId, helperAddress, amountEth) {
     }
 
     const amountWei = ethers.parseEther(amountEth);
+    await ensureVerifiedWalletMatchesSigner(signer);
     const tx = await contracts.escrow.createEscrow(taskId, helperAddress, { value: amountWei });
 
     alert(`交易已提交！\nTx: ${tx.hash}\n等待确认...`);
-    const receipt = await tx.wait();
-
-    await syncEscrowStatus(taskId, "lock", tx.hash);
-
-    alert(`赏金已锁定到合约！🔒\n金额: ${amountEth} ETH\n区块: ${receipt.blockNumber}`);
+    try {
+      const receipt = await tx.wait();
+      try {
+        await syncEscrowStatus(taskId, "lock", tx.hash);
+      } catch (syncErr) {
+        console.error("Escrow backend sync failed:", syncErr);
+        alert(`链上锁仓已确认，但后端同步失败：${syncErr.message}\n请刷新页面或联系管理员处理。`);
+        return false;
+      }
+      alert(`赏金已锁定到合约！🔒\n金额: ${amountEth} ETH\n区块: ${receipt.blockNumber}`);
+    } catch (waitErr) {
+      console.warn("tx.wait failed (tx may still succeed on-chain):", waitErr);
+      alert(`交易已提交（Tx: ${tx.hash}），但等待确认超时。\n请刷新页面查看最新状态。`);
+      return false;
+    }
     return true;
   } catch (err) {
     console.error("Create escrow error:", err);
@@ -228,13 +260,25 @@ async function releaseEscrow(taskId) {
       return false;
     }
 
+    await ensureVerifiedWalletMatchesSigner(signer);
     const tx = await contracts.escrow.releaseToHelper(taskId);
+
     alert(`交易已提交！\nTx: ${tx.hash}\n等待确认...`);
-    await tx.wait();
-
-    await syncEscrowStatus(taskId, "release", tx.hash);
-
-    alert("赏金已释放！✅");
+    try {
+      await tx.wait();
+      try {
+        await syncEscrowStatus(taskId, "release", tx.hash);
+      } catch (syncErr) {
+        console.error("Escrow backend sync failed:", syncErr);
+        alert(`链上释放已确认，但后端同步失败：${syncErr.message}\n请刷新页面或联系管理员处理。`);
+        return false;
+      }
+      alert("赏金已释放！✅");
+    } catch (waitErr) {
+      console.warn("tx.wait failed:", waitErr);
+      alert(`交易已提交（Tx: ${tx.hash}），请刷新页面查看状态。`);
+      return false;
+    }
     location.reload();
     return true;
   } catch (err) {
@@ -258,13 +302,25 @@ async function raiseDispute(taskId) {
       return false;
     }
 
+    await ensureVerifiedWalletMatchesSigner(signer);
     const tx = await contracts.escrow.raiseDispute(taskId);
+
     alert(`交易已提交！\nTx: ${tx.hash}\n等待确认...`);
-    await tx.wait();
-
-    await syncEscrowStatus(taskId, "dispute", tx.hash);
-
-    alert("仲裁已发起！⚖️ 等待专家用户投票。");
+    try {
+      await tx.wait();
+      try {
+        await syncEscrowStatus(taskId, "dispute", tx.hash);
+      } catch (syncErr) {
+        console.error("Escrow backend sync failed:", syncErr);
+        alert(`链上仲裁已发起，但后端同步失败：${syncErr.message}\n请刷新页面或联系管理员处理。`);
+        return false;
+      }
+      alert("仲裁已发起！⚖️ 等待专家用户投票。");
+    } catch (waitErr) {
+      console.warn("tx.wait failed:", waitErr);
+      alert(`交易已提交（Tx: ${tx.hash}），请刷新页面查看状态。`);
+      return false;
+    }
     location.reload();
     return true;
   } catch (err) {

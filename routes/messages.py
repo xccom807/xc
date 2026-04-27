@@ -53,6 +53,9 @@ def messages_chat(user_id: int):
         return redirect(url_for("messages.messages_inbox"))
 
     form = MessageForm()
+    if getattr(current_user, "is_blacklisted", False) and form.is_submitted():
+        flash("您的账号已被列入黑名单，无法发送消息。", "error")
+        return redirect(url_for("messages.messages_chat", user_id=partner.id))
     if form.validate_on_submit():
         msg = Message(sender_id=current_user.id, receiver_id=partner.id, content=form.content.data.strip())
         db.session.add(msg)

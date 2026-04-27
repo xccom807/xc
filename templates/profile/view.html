@@ -23,6 +23,15 @@
       </div>
     </div>
 
+    {% if profile_user.is_blacklisted %}
+      <div style="margin-top:1rem; padding:0.6rem 1rem; background:rgba(248,113,113,0.1); border:1px solid rgba(248,113,113,0.3); border-radius:var(--radius-sm); color:var(--danger); font-size:0.9rem;">
+        🚫 该用户已被管理员列入黑名单{% if profile_user.blacklist_reason %}：{{ profile_user.blacklist_reason }}{% endif %}
+        {% if current_user.is_authenticated and current_user.id == profile_user.id %}
+          <a href="{{ url_for('main.appeal') }}" style="color:var(--accent); margin-left:0.8rem; text-decoration:underline;">提交申诉 →</a>
+        {% endif %}
+      </div>
+    {% endif %}
+
     {# 操作按钮 #}
     <div class="actions" style="margin-top:1rem; display:flex; gap:.75rem; flex-wrap:wrap;">
       {% if current_user.is_authenticated and current_user.id == profile_user.id %}

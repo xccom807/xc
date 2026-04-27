@@ -261,7 +261,7 @@ def update_merkle_root_onchain(app) -> dict:
         )
 
         account = w3.eth.account.from_key(private_key)
-        nonce = w3.eth.get_transaction_count(account.address)
+        nonce = w3.eth.get_transaction_count(account.address, "pending")
 
         tx = contract.functions.updateMerkleRoot(
             bytes.fromhex(root_hex[2:])  # 去掉 0x 前缀
@@ -274,7 +274,17 @@ def update_merkle_root_onchain(app) -> dict:
         })
 
         signed = w3.eth.account.sign_transaction(tx, private_key)
-        tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+        try:
+            tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+        except Exception as e:
+            err_msg = str(e)
+            if "already known" in err_msg:
+                return {"success": False, "error": "交易已提交，请等待上一笔确认后再试（约15-30秒）", "eligible_count": len(entries)}
+            if "nonce too low" in err_msg:
+                return {"success": False, "error": "Nonce 冲突，请稍后重试", "eligible_count": len(entries)}
+            if "insufficient funds" in err_msg:
+                return {"success": False, "error": "签名账户 Sepolia ETH 余额不足，请先领取测试币", "eligible_count": len(entries)}
+            return {"success": False, "error": f"发送交易失败: {err_msg[:200]}", "eligible_count": len(entries)}
 
         # 可选：等待确认
         wait = app.config.get("ETH_WAIT_FOR_RECEIPT", False)

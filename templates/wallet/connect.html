@@ -492,6 +492,7 @@ async function disconnectWallet() {
       showConnectionError(data.error || '解绑失败，请重试。');
       return;
     }
+    localStorage.removeItem('dh_wallet_connected');
     showConnectionSuccess('DailyHelper', 'Wallet disconnected');
     refreshWalletStatus();
   } catch (error) {

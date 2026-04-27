@@ -216,15 +216,14 @@ def search_page():
             pagination_users = uq.paginate(page=page, per_page=per_page, error_out=False)
             results_users = pagination_users.items
 
-    return render_template(
-        "search.html",
-        q=q,
-        search_type=search_type,
-        results_requests=results_requests,
-        results_users=results_users,
-        pagination_requests=pagination_requests,
-        pagination_users=pagination_users,
+    ctx = dict(
+        q=q, search_type=search_type,
+        results_requests=results_requests, results_users=results_users,
+        pagination_requests=pagination_requests, pagination_users=pagination_users,
     )
+    if request.headers.get("HX-Request"):
+        return render_template("partials/search_results.html", **ctx)
+    return render_template("search.html", **ctx)
 
 
 @main_bp.route("/leaderboard")
@@ -257,3 +256,30 @@ def leaderboard():
         top_helpers=top_helpers,
         top_requesters=top_requesters,
     )
+
+
+@main_bp.route("/appeal", methods=["GET", "POST"])
+@login_required
+def appeal():
+    from models import Appeal
+    from forms import AppealForm
+
+    if not current_user.is_blacklisted:
+        flash("您的账号状态正常，无需申诉。", "info")
+        return redirect(url_for("main.dashboard"))
+
+    pending = Appeal.query.filter_by(user_id=current_user.id, status="pending").first()
+    history = Appeal.query.filter_by(user_id=current_user.id).order_by(Appeal.created_at.desc()).all()
+
+    form = AppealForm()
+    if form.validate_on_submit():
+        if pending:
+            flash("您已有一条待处理的申诉，请等待管理员回复。", "error")
+            return redirect(url_for("main.appeal"))
+        ap = Appeal(user_id=current_user.id, reason=form.reason.data.strip())
+        db.session.add(ap)
+        db.session.commit()
+        flash("申诉已提交，请耐心等待管理员处理。", "success")
+        return redirect(url_for("main.appeal"))
+
+    return render_template("appeal.html", form=form, pending=pending, history=history)

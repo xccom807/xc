@@ -44,7 +44,7 @@
             <button class="btn btn-small danger" type="submit" onclick="return confirm('确认取消该求助吗？此操作不可撤销。')"><i class="fa-solid fa-xmark"></i> 取消求助</button>
           </form>
         </div>
-      {% elif is_requester and req.status == 'in_progress' %}
+      {% elif is_requester and req.status == 'in_progress' and (not req.price or req.is_volunteer) %}
         <div class="actions" style="margin-top:1rem;">
           <form method="post" action="{{ url_for('cancel_request', request_id=req.id) }}" style="display:inline;">
             {{ cancel_form.hidden_tag() }}
@@ -82,10 +82,12 @@
                     <form method="post" style="margin-top: 0.5rem;" id="accept-form-{{ offer.id }}">
                       {{ accept_form.hidden_tag() }}
                       <input type="hidden" name="offer_id" value="{{ offer.id }}">
-                      {% if req.price and not req.is_volunteer and offer.helper.wallet_link %}
+                      {% if req.price and not req.is_volunteer and offer.helper.wallet_link and offer.helper.wallet_link.verified_at %}
                         <button type="button" class="btn btn-small" onclick="acceptWithEscrow({{ req.id }}, '{{ offer.helper.wallet_link.address }}', '{{ req.price }}', 'accept-form-{{ offer.id }}')">
                           <i class="fa-solid fa-lock"></i> 接受并锁定赏金
                         </button>
+                      {% elif req.price and not req.is_volunteer %}
+                        <span class="badge pending">帮助者未绑定已验证钱包，不能锁定赏金</span>
                       {% else %}
                         {{ accept_form.submit(
                           class='btn btn-small',
@@ -114,7 +116,7 @@
               {% if req.price and not req.is_volunteer %}
                 {# 查找已接受 offer 的帮助者钱包地址 #}
                 {% set accepted_offer = all_offers|selectattr('status','equalto','accepted')|first %}
-                {% set helper_wallet = accepted_offer.helper.wallet_link.address if accepted_offer and accepted_offer.helper.wallet_link else '' %}
+                {% set helper_wallet = accepted_offer.helper.wallet_link.address if accepted_offer and accepted_offer.helper.wallet_link and accepted_offer.helper.wallet_link.verified_at else '' %}
 
                 <div id="escrow-actions-{{ req.id }}">
                   <span class="muted">正在检查链上 Escrow 状态...</span>
@@ -146,6 +148,10 @@
                       const status = Number(data[3]);
 
                       if (status === 0) {
+                        if (!helperAddr) {
+                          container.innerHTML = '<span class="flash error">帮助者未绑定已验证钱包，不能创建 Escrow。</span>';
+                          return;
+                        }
                         container.innerHTML = `
                           <button class="btn" onclick="lockEscrowNow(${taskId}, '${helperAddr}', '${amountEth}')">
                             <i class="fa-solid fa-lock"></i> 锁定赏金到 Escrow 合约 (${amountEth} ETH)
@@ -166,17 +172,7 @@
                       }
                     } catch(e) {
                       console.error("Escrow status check error:", e);
-                      container.innerHTML = `
-                        <button class="btn btn-success" onclick="releaseEscrow(${taskId})">
-                          <i class="fa-solid fa-unlock"></i> 确认完成并释放赏金
-                        </button>
-                        <button class="btn danger" onclick="raiseDispute(${taskId})">
-                          <i class="fa-solid fa-gavel"></i> 发起仲裁
-                        </button>
-                        <button class="btn" onclick="lockEscrowNow(${taskId}, '${helperAddr}', '${amountEth}')" style="margin-top:.5rem;">
-                          <i class="fa-solid fa-lock"></i> 锁定赏金 (${amountEth} ETH)
-                        </button>
-                        <p class="muted" style="margin-top:.25rem;font-size:.8rem;">⚠️ 无法读取链上状态，所有操作按钮已显示。</p>`;
+                      container.innerHTML = '<span class="flash error">⚠️ 无法读取链上 Escrow 状态，为避免误操作，暂不显示资金操作按钮。请刷新页面或检查 RPC/MetaMask。</span>';
                     }
                   });
                 </script>
@@ -238,7 +234,7 @@
       {% endif %}
 
       {# Payment Section — auto-detect Escrow vs manual #}
-      {% if req.status == 'completed' and req.price and not req.is_volunteer %}
+      {% if req.price and not req.is_volunteer and (req.status == 'completed' or (payment and payment.status == 'refunded')) %}
         <div class="section" style="margin-top:1rem;">
           <h3><i class="fa-solid fa-wallet"></i> 支付信息</h3>
           <div id="payment-section-{{ req.id }}" style="background:var(--panel-color);border:1px solid var(--border-color);border-radius:var(--border-radius);padding:1.25rem;margin:.75rem 0;">
@@ -252,6 +248,8 @@
             document.addEventListener("DOMContentLoaded", async function() {
               const box = document.getElementById("payment-section-{{ req.id }}");
               const amountLine = box.querySelector("div"); // keep amount line
+              const backendStatus = "{{ req.status }}";
+              const backendPaymentStatus = "{{ payment.status if payment else '' }}";
 
               try {
                 const cfg = await fetch("/api/contracts/config").then(r => r.json());
@@ -263,27 +261,67 @@
                 const abi = ["function getEscrow(uint256 taskId) external view returns (address,address,uint256,uint8,uint64,uint64,uint32,uint32)"];
                 const c = new ethers.Contract(cfg.escrow_contract, abi, provider);
                 const d = await c.getEscrow({{ req.id }});
+                const requesterAddr = d[0];
+                const helper = d[1];
                 const status = Number(d[3]);
+                const votesHelper = Number(d[6]);
+                const votesRequester = Number(d[7]);
+
+                async function syncEscrowBackend(payload) {
+                  const resp = await fetch("/api/escrow/sync", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                  });
+                  if (!resp.ok) {
+                    let message = "后端同步 Escrow 状态失败";
+                    try {
+                      const data = await resp.json();
+                      message = data.error || message;
+                    } catch (e) {
+                      message = await resp.text();
+                    }
+                    throw new Error(message);
+                  }
+                  return await resp.json();
+                }
 
                 if (status === 2 || status === 4) {
-                  // Escrow 已释放或已裁决 → 自动结算完成
-                  const helper = d[1];
                   const amt = ethers.formatEther(d[2]);
+                  const helperWins = status === 2 || votesHelper > votesRequester;
+                  const recipient = helperWins ? helper : requesterAddr;
+                  let syncError = null;
+                  if (helperWins && (backendStatus !== "completed" || backendPaymentStatus !== "paid")) {
+                    try {
+                      await syncEscrowBackend({ task_id: {{ req.id }}, action: status === 2 ? "release" : "resolve", outcome: "helper", recipient_address: helper, tx_hash: "" });
+                    } catch (e) {
+                      syncError = e;
+                      console.error("escrow sync failed:", e);
+                    }
+                  } else if (!helperWins && (backendStatus !== "cancelled" || backendPaymentStatus !== "refunded")) {
+                    try {
+                      await syncEscrowBackend({ task_id: {{ req.id }}, action: "resolve", outcome: "requester", recipient_address: requesterAddr, tx_hash: "" });
+                    } catch (e) {
+                      syncError = e;
+                      console.error("escrow sync failed:", e);
+                    }
+                  }
                   box.innerHTML = `
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem;">
                       <span class="muted">应付金额</span>
                       <strong style="font-size:1.2rem;">${amt} ETH</strong>
                     </div>
+                    ${syncError ? `<div class="flash error">⚠️ 后端状态同步失败：${syncError.message}</div>` : ""}
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
                       <span class="muted">结算方式</span>
-                      <span class="badge completed">⛓️ Escrow 智能合约自动结算</span>
+                      <span class="badge ${helperWins ? 'completed' : 'rejected'}">⛓️ ${helperWins ? 'Escrow 已打款给帮助者' : '仲裁退款给求助者'}</span>
                     </div>
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
-                      <span class="muted">收款方</span>
-                      <code style="font-size:.85rem;word-break:break-all;">${helper}</code>
+                      <span class="muted">${helperWins ? '收款方' : '退款方'}</span>
+                      <code style="font-size:.85rem;word-break:break-all;">${recipient}</code>
                     </div>
-                    <div class="flash success" style="margin-top:.75rem;">
-                      <i class="fa-solid fa-circle-check"></i> 赏金已通过 Escrow 合约自动转给帮助者，无需手动支付。
+                    <div class="flash ${helperWins ? 'success' : 'info'}" style="margin-top:.75rem;">
+                      <i class="fa-solid fa-circle-check"></i> ${helperWins ? '赏金已通过 Escrow 合约自动转给帮助者，无需手动支付。' : '仲裁结果为退款，赏金已通过 Escrow 合约退回求助者。'}
                     </div>
                     <a href="https://sepolia.etherscan.io/address/${cfg.escrow_contract}" target="_blank"
                        style="font-size:.85rem;color:var(--accent-color);display:inline-block;margin-top:.5rem;">
@@ -296,7 +334,24 @@
               }
 
               // 无 Escrow 或链上查不到 → 显示手动支付流程
-              {% if payment and payment.status == 'paid' %}
+              {% if payment and payment.status == 'refunded' %}
+                box.innerHTML = `
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem;">
+                    <span class="muted">托管金额</span>
+                    <strong style="font-size:1.2rem;">{{ '%.4f'|format(req.price) }} ETH</strong>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+                    <span class="muted">结算结果</span>
+                    <span class="badge rejected">仲裁退款给求助者</span>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+                    <span class="muted">退款地址</span>
+                    <code style="font-size:.85rem;word-break:break-all;">{{ payment.helper_address }}</code>
+                  </div>
+                  <div class="flash info" style="margin-top:.5rem;">
+                    <i class="fa-solid fa-circle-info"></i> 仲裁结果为退款，该任务不应显示为支付给帮助者。
+                  </div>`;
+              {% elif payment and payment.status == 'paid' %}
                 box.innerHTML = `
                   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem;">
                     <span class="muted">应付金额</span>
@@ -308,7 +363,11 @@
                   </div>
                   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
                     <span class="muted">交易哈希</span>
-                    <a href="https://sepolia.etherscan.io/tx/{{ payment.tx_hash }}" target="_blank" style="font-size:.85rem;color:var(--accent-color);word-break:break-all;">{{ payment.tx_hash[:10] }}...{{ payment.tx_hash[-8:] }}</a>
+                    {% if payment.tx_hash %}
+                      <a href="https://sepolia.etherscan.io/tx/{{ payment.tx_hash }}" target="_blank" style="font-size:.85rem;color:var(--accent-color);word-break:break-all;">{{ payment.tx_hash[:10] }}...{{ payment.tx_hash[-8:] }}</a>
+                    {% else %}
+                      <span class="muted" style="font-size:.85rem;">暂无</span>
+                    {% endif %}
                   </div>
                   <div class="flash success" style="margin-top:.5rem;">
                     <i class="fa-solid fa-circle-check"></i> 支付已完成，交易凭证已记录。
@@ -457,14 +516,7 @@
     if (!confirm(`接受该帮助申请并锁定 ${amountEth} ETH 到 Escrow 合约？`)) return;
     const success = await createEscrow(taskId, helperAddress, amountEth);
     if (success) {
-      const form = document.getElementById(formId);
-      // JS form.submit() 不会包含按钮值，手动添加 hidden input
-      const btn = document.createElement('input');
-      btn.type = 'hidden';
-      btn.name = 'submit';
-      btn.value = 'Accept';
-      form.appendChild(btn);
-      form.submit();
+      location.reload();
     }
   }
 

@@ -141,6 +141,9 @@ def request_detail(request_id: int):
         flash("您的账号已被列入黑名单，无法提供帮助。", "error")
         return redirect(url_for("features.request_detail", request_id=req.id))
     if offer_form.submit.data and offer_form.validate_on_submit():
+        if current_user.id == req.user_id:
+            flash("不能给自己的求助提交帮助。", "error")
+            return redirect(url_for("features.request_detail", request_id=req.id))
         existing_offer = HelpOffer.query.filter_by(request_id=req.id, helper_id=current_user.id).first()
         if existing_offer:
             flash("您已对该求助提交过帮助申请，无法重复提交。", "error")
@@ -185,6 +188,9 @@ def request_detail(request_id: int):
         if offer_id:
             offer = HelpOffer.query.get_or_404(offer_id)
             if offer.request_id == req.id and offer.status == "pending":
+                if req.price and not req.is_volunteer:
+                    flash("付费任务必须先通过 Escrow 合约锁定赏金，不能直接接受帮助申请。", "error")
+                    return redirect(url_for("features.request_detail", request_id=req.id))
                 HelpOffer.query.filter_by(request_id=req.id, status="pending").update({"status": "rejected"})
                 offer.status = "accepted"
                 req.status = "in_progress"
@@ -278,6 +284,9 @@ def request_detail(request_id: int):
             return redirect(url_for("features.request_detail", request_id=req.id))
 
     # Handle review submit
+    if getattr(current_user, "is_blacklisted", False) and review_form.submit.data:
+        flash("您的账号已被列入黑名单，无法提交评价。", "error")
+        return redirect(url_for("features.request_detail", request_id=req.id))
     if review_form.submit.data and review_form.validate_on_submit():
         completed = HelpOffer.query.filter_by(request_id=req.id, status="completed").first()
         if not completed or req.status != "completed":
@@ -381,7 +390,7 @@ def request_detail(request_id: int):
             is_helper = True
 
     payment = None
-    if req.status == "completed" and req.price and not req.is_volunteer:
+    if req.price and not req.is_volunteer:
         from models import Payment
         payment = Payment.query.filter_by(request_id=req.id).first()
 
@@ -418,6 +427,9 @@ def cancel_request(request_id: int):
         return redirect(url_for("features.request_detail", request_id=req.id))
     if req.status not in ("open", "in_progress"):
         flash("该求助当前状态无法取消。", "error")
+        return redirect(url_for("features.request_detail", request_id=req.id))
+    if req.status == "in_progress" and req.price and not req.is_volunteer:
+        flash("付费任务的赏金已进入 Escrow 托管，不能直接取消。请在任务详情页释放赏金或发起仲裁退款。", "error")
         return redirect(url_for("features.request_detail", request_id=req.id))
 
     if form.validate_on_submit():
@@ -498,6 +510,9 @@ def flag_content(content_type: str, content_id: int):
     from models import Flag, HelpRequest, User
     from forms import FlagForm
 
+    if getattr(current_user, "is_blacklisted", False):
+        flash("您的账号已被列入黑名单，无法举报。", "error")
+        return redirect(request.referrer or url_for("main.index"))
     if content_type not in ("request", "user", "review"):
         abort(400)
 
@@ -552,66 +567,33 @@ def flag_content(content_type: str, content_id: int):
 
 @features_bp.route("/volunteer")
 def volunteer():
-    from models import HelpRequest, HelpOffer
+    from models import HelpOffer, HelpRequest
 
-    q = HelpRequest.query.filter(HelpRequest.is_volunteer.is_(True), HelpRequest.status == "open")
-
-    category = request.args.get("category", "").strip()
-    location_q = request.args.get("location", "").strip()
-    start_date = request.args.get("start_date", "").strip()
-    end_date = request.args.get("end_date", "").strip()
-    sort = request.args.get("sort", "newest")
     page = int(request.args.get("page", 1) or 1)
     per_page = 9
-
-    if category:
-        q = q.filter(HelpRequest.category == category)
-    if location_q:
-        q = q.filter(HelpRequest.location.ilike(f"%{location_q}%"))
-
-    def parse_date(s):
-        try:
-            return datetime.strptime(s, "%Y-%m-%d")
-        except Exception:
-            return None
-    sd = parse_date(start_date)
-    ed = parse_date(end_date)
-    if sd:
-        q = q.filter(HelpRequest.created_at >= sd)
-    if ed:
-        q = q.filter(HelpRequest.created_at < ed + timedelta(days=1))
-
-    featured = (
-        HelpRequest.query.filter(HelpRequest.is_volunteer.is_(True), HelpRequest.status == "open")
-        .order_by(HelpRequest.created_at.asc()).limit(3).all()
-    )
-
-    if sort == "newest":
-        q = q.order_by(HelpRequest.created_at.desc())
-    else:
-        q = q.order_by(HelpRequest.created_at.asc())
-
+    q = HelpRequest.query.filter(
+        HelpRequest.status == "open",
+        HelpRequest.is_volunteer.is_(True),
+    ).order_by(HelpRequest.created_at.desc())
     pagination = q.paginate(page=page, per_page=per_page, error_out=False)
-    items = pagination.items
-
-    completed_volunteer = HelpRequest.query.filter(HelpRequest.is_volunteer.is_(True), HelpRequest.status == "completed").count()
+    categories = ["烹饪", "清洁", "搬运", "辅导", "跑腿", "技术支持", "其他"]
+    completed_volunteer = HelpRequest.query.filter(
+        HelpRequest.is_volunteer.is_(True),
+        HelpRequest.status == "completed",
+    ).count()
     active_volunteers = (
         db.session.query(func.count(func.distinct(HelpOffer.helper_id)))
         .join(HelpRequest, HelpOffer.request_id == HelpRequest.id)
         .filter(HelpRequest.is_volunteer.is_(True), HelpOffer.status.in_(["accepted", "completed"]))
         .scalar() or 0
     )
-    people_helped = completed_volunteer
-    est_hours = completed_volunteer * 2
-
-    volunteer_categories = ["老年关怀", "社区清洁", "教学辅导", "食物分发", "动物福利", "医疗支持", "其他"]
-
     return render_template(
-        "features/volunteer.html",
-        items=items, featured=featured, pagination=pagination,
-        stats={"est_hours": est_hours, "people_helped": people_helped, "active_volunteers": active_volunteers},
-        filters={"category": category, "location": location_q, "start_date": start_date, "end_date": end_date, "sort": sort},
-        categories=volunteer_categories,
+        "features/marketplace.html",
+        items=pagination.items,
+        pagination=pagination,
+        categories=categories,
+        vol_stats={"est_hours": completed_volunteer * 2, "people_helped": completed_volunteer, "active_volunteers": active_volunteers},
+        filters={"category": "", "location": "", "min_price": "", "max_price": "", "include_volunteer": "on", "start_date": "", "end_date": "", "sort": "newest"},
     )
 
 
@@ -726,12 +708,25 @@ def marketplace():
     pagination = q.paginate(page=page, per_page=per_page, error_out=False)
     categories = ["烹饪", "清洁", "搬运", "辅导", "跑腿", "技术支持", "其他"]
 
-    return render_template(
-        "features/marketplace.html",
+    from models import HelpOffer
+    completed_volunteer = HelpRequest.query.filter(HelpRequest.is_volunteer.is_(True), HelpRequest.status == "completed").count()
+    active_volunteers = (
+        db.session.query(func.count(func.distinct(HelpOffer.helper_id)))
+        .join(HelpRequest, HelpOffer.request_id == HelpRequest.id)
+        .filter(HelpRequest.is_volunteer.is_(True), HelpOffer.status.in_(["accepted", "completed"]))
+        .scalar() or 0
+    )
+    vol_stats = {"est_hours": completed_volunteer * 2, "people_helped": completed_volunteer, "active_volunteers": active_volunteers}
+
+    ctx = dict(
         items=pagination.items, pagination=pagination, categories=categories,
+        vol_stats=vol_stats,
         filters={"category": category, "location": location_q, "min_price": min_price, "max_price": max_price,
                  "include_volunteer": include_volunteer, "start_date": start_date, "end_date": end_date, "sort": sort},
     )
+    if request.headers.get("HX-Request"):
+        return render_template("partials/marketplace_results.html", **ctx)
+    return render_template("features/marketplace.html", **ctx)
 
 
 @features_bp.route("/my-offers")

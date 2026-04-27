@@ -174,6 +174,11 @@ class FlagForm(FlaskForm):
     submit = SubmitField("提交举报")
 
 
+class AppealForm(FlaskForm):
+    reason = TextAreaField("申诉理由", validators=[DataRequired(), Length(min=10, max=1000)])
+    submit = SubmitField("提交申诉")
+
+
 class MessageForm(FlaskForm):
     content = TextAreaField("消息内容", validators=[DataRequired(), Length(min=1, max=2000)])
     submit = SubmitField("发送")

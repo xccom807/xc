@@ -67,7 +67,7 @@
       <i class="fa-solid fa-check-circle" style="font-size:3rem;color:var(--accent-color);margin-bottom:1rem;display:block;"></i>
       <p class="muted">当前没有需要帮助的请求。</p>
       <div style="margin-top:1rem;display:flex;gap:1rem;justify-content:center;">
-        <a href="{{ url_for('volunteer') }}" class="btn secondary">查看志愿机会</a>
+        <a href="{{ url_for('marketplace', include_volunteer='on') }}" class="btn secondary">查看志愿机会</a>
         <a href="{{ url_for('marketplace') }}" class="btn secondary">浏览互助广场</a>
       </div>
     </div>

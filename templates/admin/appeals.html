@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+{% block content %}
+  <section class="admin-card">
+    <h2>用户申诉管理</h2>
+    <div style="margin-bottom:1rem; display:flex; gap:.5rem; flex-wrap:wrap;">
+      <a class="btn small {{ '' if status_filter else 'active' }}" href="{{ url_for('admin.admin_appeals') }}">全部</a>
+      <a class="btn small {{ 'active' if status_filter=='pending' }}" href="{{ url_for('admin.admin_appeals', status='pending') }}">待处理</a>
+      <a class="btn small {{ 'active' if status_filter=='approved' }}" href="{{ url_for('admin.admin_appeals', status='approved') }}">已通过</a>
+      <a class="btn small {{ 'active' if status_filter=='rejected' }}" href="{{ url_for('admin.admin_appeals', status='rejected') }}">已驳回</a>
+    </div>
+
+    {% if not appeals %}
+      <p class="muted" style="padding:2rem 0; text-align:center;">暂无申诉记录</p>
+    {% endif %}
+
+    {% for ap in appeals %}
+      <div class="card" style="margin-bottom:1rem; padding:1.2rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
+          <div>
+            <strong>{{ ap.user.username }}</strong>
+            <span class="muted" style="margin-left:0.5rem;">{{ ap.user.email }}</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:0.6rem;">
+            {% if ap.status == 'pending' %}
+              <span class="badge pending">待处理</span>
+            {% elif ap.status == 'approved' %}
+              <span class="badge completed">已通过</span>
+            {% else %}
+              <span class="badge rejected">已驳回</span>
+            {% endif %}
+            <span class="muted" style="font-size:0.8rem;">{{ ap.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+          </div>
+        </div>
+
+        {% if ap.user.blacklist_reason %}
+          <div style="font-size:0.85rem; color:var(--danger); margin-bottom:0.5rem;">
+            拉黑原因：{{ ap.user.blacklist_reason }}
+          </div>
+        {% endif %}
+
+        <div style="background:var(--bg); padding:0.8rem; border-radius:var(--radius-sm); font-size:0.9rem; white-space:pre-wrap; margin-bottom:0.8rem;">{{ ap.reason }}</div>
+
+        {% if ap.admin_reply %}
+          <div style="font-size:0.85rem; color:var(--muted); margin-bottom:0.5rem;">
+            <strong style="color:var(--accent);">管理员回复：</strong>{{ ap.admin_reply }}
+          </div>
+        {% endif %}
+
+        {% if ap.status == 'pending' %}
+          <div style="display:flex; gap:0.8rem; align-items:flex-end; flex-wrap:wrap; margin-top:0.5rem;">
+            <div style="flex:1; min-width:200px;">
+              <input class="input" type="text" form="form-{{ ap.id }}-approve" name="admin_reply" placeholder="回复内容（可选）" style="width:100%;" id="reply-{{ ap.id }}" />
+            </div>
+            <form id="form-{{ ap.id }}-approve" method="post" action="{{ url_for('admin.admin_appeal_action', appeal_id=ap.id, action='approve') }}" style="display:inline;" onsubmit="return confirm('确认通过申诉并解除该用户的拉黑？');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn small" type="submit" onclick="this.form.querySelector('[name=admin_reply]') || (function(f,r){var i=document.createElement('input');i.type='hidden';i.name='admin_reply';i.value=document.getElementById('reply-'+r).value;f.appendChild(i);})(this.form,'{{ ap.id }}')">✅ 通过（解除拉黑）</button>
+            </form>
+            <form method="post" action="{{ url_for('admin.admin_appeal_action', appeal_id=ap.id, action='reject') }}" style="display:inline;" onsubmit="var r=document.getElementById('reply-{{ ap.id }}').value;if(!r){return confirm('确认驳回该申诉？');}var i=document.createElement('input');i.type='hidden';i.name='admin_reply';i.value=r;this.appendChild(i);return confirm('确认驳回该申诉？');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn danger small" type="submit">❌ 驳回</button>
+            </form>
+          </div>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </section>
+{% endblock %}

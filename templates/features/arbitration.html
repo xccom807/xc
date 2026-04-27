@@ -67,6 +67,9 @@
 
     // 初始化只读 provider
     function initReadProvider() {
+      if (!ESCROW_ADDR || !SBT_ADDR) {
+        return;
+      }
       if (RPC_URL) {
         readProvider = new ethers.JsonRpcProvider(RPC_URL);
       } else if (window.ethereum) {
@@ -76,6 +79,25 @@
         escrowRead = new ethers.Contract(ESCROW_ADDR, ESCROW_ABI, readProvider);
         sbtRead = new ethers.Contract(SBT_ADDR, SBT_ABI, readProvider);
       }
+    }
+
+    async function syncEscrowBackend(payload) {
+      const resp = await fetch("/api/escrow/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!resp.ok) {
+        let message = "后端同步 Escrow 状态失败";
+        try {
+          const data = await resp.json();
+          message = data.error || message;
+        } catch (e) {
+          message = await resp.text();
+        }
+        throw new Error(message);
+      }
+      return await resp.json();
     }
 
     // 检查钱包 & SBT 资格
@@ -149,6 +171,10 @@
     // 加载每个争议的链上信息
     async function loadDisputeInfo(taskId) {
       const el = document.getElementById("dispute-" + taskId);
+      if (!ESCROW_ADDR || !SBT_ADDR) {
+        el.innerHTML = '<span class="flash error">Escrow 或 SBT 合约地址未配置，无法加载链上仲裁状态。</span>';
+        return;
+      }
       if (!escrowRead) {
         el.innerHTML = '<span class="flash info">无法连接链上合约</span>';
         return;
@@ -178,16 +204,20 @@
         html += '</div>';
 
         if (status === 4 || status === 2) {
-          // 链上已裁决/完成 → 自动同步后端 DB
+          const outcome = status === 2 ? "helper" : (votesHelper > votesRequester ? "helper" : "requester");
+          const recipient = outcome === "helper" ? helper : requester;
+          let syncError = null;
           try {
-            await fetch("/api/escrow/sync", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ task_id: taskId, action: "resolve", tx_hash: "" }),
-            });
-          } catch(e) { /* ignore */ }
-          const winner = votesHelper >= votesRequester ? '打款给帮助者' : '退款给求助者';
-          html += `<div class="flash success">✅ 此争议已裁决：<strong>${winner}</strong>，资金已自动划转。</div>`;
+            await syncEscrowBackend({ task_id: taskId, action: status === 2 ? "release" : "resolve", outcome: outcome, recipient_address: recipient, tx_hash: "" });
+          } catch(e) {
+            syncError = e;
+            console.error("escrow sync failed:", e);
+          }
+          const winner = outcome === "helper" ? '打款给帮助者' : '退款给求助者';
+          html += `<div class="flash success">✅ 此争议链上已裁决：<strong>${winner}</strong>，资金已自动划转。</div>`;
+          if (syncError) {
+            html += `<div class="flash error">⚠️ 后端状态同步失败：${syncError.message}</div>`;
+          }
           el.innerHTML = html;
           // 标记卡片为已解决，稍后隐藏
           el.closest('.card').style.opacity = '0.6';
@@ -258,21 +288,21 @@
         // 等待链上确认后查询最新状态
         const data = await escrowRead.getEscrow(taskId);
         const newStatus = Number(data[3]);
+        const votesHelper = Number(data[6]);
+        const votesRequester = Number(data[7]);
 
         // 同步后端 DB
         if (newStatus === 4 || newStatus === 2) {
-          await fetch("/api/escrow/sync", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ task_id: taskId, action: "resolve", tx_hash: tx.hash }),
-          });
+          const outcome = newStatus === 2 ? "helper" : (votesHelper > votesRequester ? "helper" : "requester");
+          const recipient = outcome === "helper" ? data[1] : data[0];
+          try {
+            await syncEscrowBackend({ task_id: taskId, action: newStatus === 2 ? "release" : "resolve", outcome: outcome, recipient_address: recipient, tx_hash: tx.hash });
+          } catch (syncErr) {
+            alert(`投票链上已成功并触发裁决，但后端同步失败：${syncErr.message}\n请刷新页面或联系管理员处理。`);
+            return;
+          }
           alert("投票成功！争议已裁决，资金已自动划转。");
         } else {
-          await fetch("/api/escrow/sync", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ task_id: taskId, action: "dispute", tx_hash: tx.hash }),
-          });
           alert("投票成功！等待更多仲裁员投票。");
         }
         location.reload();
@@ -308,16 +338,18 @@
           const d = await escrowRead.getEscrow(tid);
           const s = Number(d[3]);
           if (s === 4 || s === 2) {
-            // 链上已解决，同步后端并刷新页面
-            await fetch("/api/escrow/sync", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ task_id: tid, action: "resolve", tx_hash: "" }),
-            });
+            const outcome = s === 2 ? "helper" : (Number(d[6]) > Number(d[7]) ? "helper" : "requester");
+            const recipient = outcome === "helper" ? d[1] : d[0];
+            await syncEscrowBackend({ task_id: tid, action: s === 2 ? "release" : "resolve", outcome: outcome, recipient_address: recipient, tx_hash: "" });
             location.reload();
             return;
           }
-        } catch(e) { /* ignore */ }
+        } catch(e) {
+          const el = document.getElementById("dispute-" + tid);
+          if (el) {
+            el.innerHTML = '<span class="flash error">自动同步链上裁决失败: ' + e.message + '</span>';
+          }
+        }
       }
       // 更新票数显示
       for (const tid of TASK_IDS) {

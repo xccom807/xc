@@ -41,7 +41,7 @@
   {% set actions = [
     (url_for('request_help'), 'fa-solid fa-hand-holding-hand', '发布求助', '发布任务并获得社区帮助', 'linear-gradient(135deg,#3b82f6,#2563eb)'),
     (url_for('offer_help'), 'fa-solid fa-person-rays', '提供帮助', '贡献技能和时间帮助他人', 'linear-gradient(135deg,#22c55e,#16a34a)'),
-    (url_for('volunteer'), 'fa-solid fa-handshake-angle', '志愿服务', '参与无偿公益志愿活动', 'linear-gradient(135deg,#f59e0b,#d97706)'),
+    (url_for('marketplace', include_volunteer='on'), 'fa-solid fa-handshake-angle', '志愿服务', '参与无偿公益志愿活动', 'linear-gradient(135deg,#f59e0b,#d97706)'),
   ] %}
   {% for href, icon, title, desc, bg in actions %}
     <a href="{{ href }}" style="text-decoration:none;color:inherit;display:block;">

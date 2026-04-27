@@ -7,6 +7,7 @@
         <option value="">全部状态</option>
         <option value="address_submitted" {{ 'selected' if status_filter == 'address_submitted' }}>待支付</option>
         <option value="paid" {{ 'selected' if status_filter == 'paid' }}>已支付</option>
+        <option value="refunded" {{ 'selected' if status_filter == 'refunded' }}>已退款</option>
       </select>
       <button class="btn" type="submit"><i class="fa-solid fa-filter"></i> 筛选</button>
     </form>
@@ -19,7 +20,7 @@
           <th>求助者</th>
           <th>帮助者</th>
           <th>金额</th>
-          <th>收款地址</th>
+          <th>收款/退款地址</th>
           <th>状态</th>
           <th>交易哈希</th>
           <th>时间</th>
@@ -55,6 +56,8 @@
             <td>
               {% if p.status == 'paid' %}
                 <span class="badge completed">已支付</span>
+              {% elif p.status == 'refunded' %}
+                <span class="badge rejected">已退款</span>
               {% else %}
                 <span class="badge pending">待支付</span>
               {% endif %}

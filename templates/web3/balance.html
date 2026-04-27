@@ -1,0 +1,95 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+  .bal-page { max-width: 560px; margin: 0 auto; padding: 2rem 0; }
+  .bal-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 2rem;
+    text-align: center;
+  }
+  .bal-icon { font-size: 2.5rem; margin-bottom: 0.6rem; }
+  .bal-title { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 1.2rem; }
+  .bal-addr {
+    font-family: monospace;
+    font-size: 0.85rem;
+    color: var(--fg);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.5rem 0.8rem;
+    word-break: break-all;
+    margin-bottom: 1.5rem;
+    display: inline-block;
+    max-width: 100%;
+  }
+  .bal-amount {
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: var(--fg-bright);
+    margin-bottom: 0.2rem;
+  }
+  .bal-amount .unit { font-size: 1rem; font-weight: 400; color: var(--muted); margin-left: 0.3rem; }
+  .bal-network {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-bottom: 1.5rem;
+  }
+  .bal-network .dot { display: inline-block; width: 6px; height: 6px; background: var(--success); border-radius: 50%; margin-right: 0.3rem; vertical-align: middle; }
+  .bal-link {
+    display: inline-block;
+    color: var(--accent);
+    font-size: 0.85rem;
+    text-decoration: none;
+    margin-top: 0.5rem;
+    transition: opacity 0.2s;
+  }
+  .bal-link:hover { opacity: 0.8; text-decoration: underline; }
+  .bal-back {
+    display: inline-block;
+    margin-top: 1.2rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .bal-back:hover { color: var(--accent); }
+  .bal-error {
+    color: var(--danger);
+    background: rgba(248, 113, 113, 0.08);
+    border: 1px solid rgba(248, 113, 113, 0.25);
+    border-radius: var(--radius-sm);
+    padding: 0.8rem 1rem;
+    font-size: 0.88rem;
+    margin-bottom: 1rem;
+    text-align: left;
+  }
+</style>
+
+<div class="bal-page">
+  <div class="bal-card">
+    {% if error %}
+      <div class="bal-icon">⚠️</div>
+      <div class="bal-error">{{ error }}</div>
+      {% if address %}
+        <div class="bal-addr">{{ address }}</div>
+      {% endif %}
+    {% elif balance_eth is not none %}
+      <div class="bal-icon">💰</div>
+      <div class="bal-title">地址余额</div>
+      <div class="bal-addr">{{ address }}</div>
+      <div class="bal-amount">{{ balance_eth }}<span class="unit">ETH</span></div>
+      <div class="bal-network"><span class="dot"></span>Sepolia 测试网</div>
+      <a class="bal-link" href="https://sepolia.etherscan.io/address/{{ address }}" target="_blank" rel="noopener">
+        在 Etherscan 上查看 →
+      </a>
+    {% else %}
+      <div class="bal-icon">🔍</div>
+      <p style="color: var(--muted);">未提供地址或 RPC 未连接</p>
+    {% endif %}
+    <br>
+    <a class="bal-back" href="{{ url_for('web3_status') }}">← 返回区块链状态</a>
+  </div>
+</div>
+{% endblock %}

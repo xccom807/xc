@@ -60,6 +60,14 @@ def create_app() -> Flask:
             # Silently fail to not break the request flow
             pass
 
+    @app.after_request
+    def add_no_store_for_dynamic_html(response):  # noqa: ANN001
+        if response.content_type.startswith("text/html"):
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        return response
+
     # Flask-Login config
     login_manager.login_view = "auth.login"
     login_manager.login_message = "请先登录后再访问该页面。"

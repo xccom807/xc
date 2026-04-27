@@ -1,454 +1,834 @@
-# Kaspersky-519-WT-05（每日互助 / DailyHelper）
+# DailyHelper（每日互助）项目评审与业务逻辑说明
 
-![Tests](https://github.com/xccom807/xc/actions/workflows/test.yml/badge.svg)
+> 更新时间：2026-04-25  
+> 文档用途：项目答辩、代码交接、AI 助手快速理解项目、后续维护参考  
+> 项目类型：Flask + SQLite + Solidity + Web3 的社区互助与链上托管平台
 
-一个基于 **Flask + 区块链** 的社区互助平台。用户可以发布求助、提交帮助提议、完成任务后通过链上支付结算并互评，所有关键操作均记录在内部审计链并可锚定至以太坊 Sepolia 测试网。
+---
 
-## 目录
+## 一、项目概述
 
-- [系统架构](#系统架构)
-- [核心功能 — 用户端](#核心功能--用户端)
-- [核心功能 — 管理员端](#核心功能--管理员端)
-- [底层系统](#底层系统)
-- [数据模型](#数据模型)
-- [项目结构](#项目结构)
-- [快速开始](#快速开始)
-- [演示数据](#演示数据)
-- [配置说明](#配置说明)
-- [页面路由一览](#页面路由一览)
-- [答辩演示流程](#答辩演示流程)
-- [常见问题](#常见问题)
-- [许可证](#许可证)
+DailyHelper（每日互助）是一个面向社区互助场景的 Web3 应用。平台支持用户发布求助、提交帮助申请、接受帮助、任务完成、支付结算、评价反馈、黑名单治理、申诉、链上审计、SBT 信誉凭证和 DAO 仲裁。
 
-## 系统架构
+项目不是单纯的信息发布系统，而是一个带有资金托管和链上仲裁能力的完整互助平台。其核心目标是解决互助交易中的信任问题：
 
-### 技术栈
+- 求助者担心付款后帮助者不履约。
+- 帮助者担心完成帮助后求助者不付款。
+- 平台需要对关键操作进行可追溯审计。
+- 出现争议时，需要第三方可信仲裁机制。
 
-| 层面 | 技术 |
+因此项目采用了“传统 Web 后端 + 区块链托管 + 内部审计链”的混合架构。
+
+---
+
+## 二、技术栈
+
+| 模块 | 技术 |
 |---|---|
-| **后端框架** | Flask 3.x（应用工厂 `create_app()` + 8 个 Blueprint 模块） |
-| **数据库** | Flask-SQLAlchemy + SQLite（默认） |
-| **用户认证** | Flask-Login + Flask-WTF（CSRF 全局保护） |
-| **区块链** | 内部审计链（Block/Statement 哈希链） + web3.py（Sepolia 锚定） |
-| **智能合约** | Solidity 0.8.24 + OpenZeppelin 5.x（ReputationSBT + TaskEscrow） |
-| **合约工具** | Hardhat 编译部署 + Ethers.js v6 前端交互 |
-| **钱包** | MetaMask 签名验证（challenge-response 协议） |
-| **AI 助手** | Kimi / Moonshot API（多轮对话，最近 10 轮上下文） |
-| **前端** | Jinja2 模板 + 原生 CSS/JS + Font Awesome 6.x |
+| 后端框架 | Flask |
+| ORM | SQLAlchemy |
+| 数据库 | SQLite |
+| 表单 | WTForms / Flask-WTF |
+| 登录认证 | Flask-Login |
+| 前端渲染 | Jinja2 模板 |
+| 前端交互 | 原生 JavaScript / Ethers.js v6 |
+| 区块链网络 | Sepolia 测试网 |
+| 智能合约 | Solidity 0.8.x |
+| 合约开发 | Hardhat |
+| Web3 后端 | web3.py |
+| 内部审计 | Statement + Block 哈希链 |
+| 样式 | 原生 CSS / SCSS |
 
-### 架构总览
+---
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                     浏览器 (用户/管理员)                    │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────────┐  │
-│  │ 仪表盘    │ │ 市场/详情 │ │ 私信/通知 │ │ 管理后台    │  │
-│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └─────┬──────┘  │
-└───────┼────────────┼────────────┼──────────────┼─────────┘
-        │            │            │              │
-        ▼            ▼            ▼              ▼
-┌─────────────────────────────────────────────────────────┐
-│         Flask 应用 (app.py + 8 个 Blueprint)              │
-│                                                          │
-│  ┌────────────────────────────────────────────────────┐  │
-│  │ routes/                                            │  │
-│  │  auth.py │ main.py │ features.py │ admin.py        │  │
-│  │  profile.py │ messages.py │ blockchain.py │ api.py │  │
-│  └────┬─────────────┬─────────────┬───────────┬──────┘  │
-│       │             │             │            │          │
-│       ▼             ▼             ▼            ▼          │
-│  ┌────────────────────────────────────────────────────┐  │
-│  │            SQLAlchemy ORM (models.py)               │  │
-│  │  User | HelpRequest | HelpOffer | Review | Payment  │  │
-│  │  Message | Notification | Flag | Block | Statement   │  │
-│  └──────────────────────┬─────────────────────────────┘  │
-│                         │                                 │
-│  ┌──────────────────────▼─────────────────────────────┐  │
-│  │          内部区块链 (blockchain_service.py)           │  │
-│  │  Statement ──封块──> Block (prev_hash -> hash 链)    │  │
-│  └──────────────────────┬─────────────────────────────┘  │
-└─────────────────────────┼────────────────────────────────┘
-                          │ 锚定 (submit_anchor_transaction)
-                          ▼
-              ┌───────────────────────────────────────────┐
-              │            Ethereum Sepolia                │
-              │  ┌──────────────┐  ┌───────────────────┐   │
-              │  │ReputationSBT │  │   TaskEscrow      │   │
-              │  │(灵魂绑定代币) │  │ (资金托管+DAO仲裁)│   │
-              │  └──────────────┘  └───────────────────┘   │
-              │       web3.py + Infura + Ethers.js          │
-              └───────────────────────────────────────────┘
-```
-
-### 业务流程
-
-```
-用户A (求助者)                          用户B (帮助者)
-    │                                       │
-    │── 1. 发布求助 ───────────────────────>│
-    │                                       │
-    │<── 2. 提交帮助提议 ──────────────────│
-    │                                       │
-    │── 3a. 付费任务：接受提议 + Escrow 锁定 ETH ──>│
-    │── 3b. 志愿任务：接受提议（旧流程）────>│
-    │                                       │
-    │<─────── 4. 私聊沟通 ────────────────>│
-    │                                       │
-    │── 5a. 确认完成 → Escrow 释放资金 ───>│  (付费)
-    │── 5b. 标记任务完成 ─────────────────>│  (志愿)
-    │                                       │
-    │   ⚠️ 争议? → 发起仲裁 (Disputed) ────>│
-    │         金牌用户投票 → 自动划转         │
-    │                                       │
-    │<─────── 6. 双向评价 ────────────────>│
-    │         (对数衰减信誉分更新)            │
-    │         (信誉达标 → Mint SBT)          │
-    │                                       │
-    ▼         全程上链审计 + 合约确权          ▼
-```
-
-## 核心功能 — 用户端
-
-### 1. 账号系统
-- **注册**：邮箱 + 用户名 + 密码，自动记录区块链审计
-- **登录 / 登出**：邮箱 + 密码验证，黑名单用户禁止登录
-- **忘记密码**：生成重置链接（token 有效期 1 小时）
-- **重置密码**：通过 token 设置新密码
-
-### 2. 个人资料
-- **公开主页** (`/u/<username>`)：展示信誉分、等级、完成任务数、成功率、收到的评价
-- **编辑资料** (`/settings/profile`)：修改全名、电话、地址、简介、技能、头像、经纬度
-- **仪表盘** (`/dashboard`)：4 个统计卡片 + 快捷操作 + 最近动态 + 4 标签页切换
-
-### 3. 互助任务全流程
-- **发布求助**：标题、描述、分类、地点、时间、价格（或标记志愿）
-- **帮助市场**：浏览所有开放求助，分类/地点/价格/日期/排序 多维筛选 + 分页
-- **主动帮助**：浏览可帮助的请求，自动排除自己发布的和已提交过的
-- **任务详情页**：完整生命周期（提交提议 → 接受 → 执行 → 完成 → 支付 → 评价）
-- **取消求助**：求助者可取消自己的求助，自动通知帮助者
-- **防重复提交**：同一帮助者不能对同一求助重复提交提议
-- **我的帮助** (`/my-offers`)：按状态分组查看已提交的帮助记录
-
-### 4. 支付系统（双轨模式）
-
-**付费任务 — 智能合约托管 (Escrow)**：
-1. 求助者接受提议时，唤起 MetaMask 向 TaskEscrow 合约存入约定 ETH（状态 → Locked）
-2. 任务完成后，求助者点击“释放赏金”，合约自动打入帮助者钱包（状态 → Completed）
-3. 若发生争议，任一方可发起仲裁（状态 → Disputed），由金牌用户投票裁决
-
-**志愿任务 — 传统流程**：
-1. 任务完成后，帮助者提交以太坊收款地址
-2. 求助者在链上转账后，上传交易哈希作为支付凭证
-
-### 5. 评价与信誉（对数衰减算法）
-- 双方可对已完成任务进行 1-5 星评价 + 文字评论
-- **信誉公式**：`delta = base_points × (1 / log₂(当前分 + 2)) × 评论字数加成`
-  - 分越高，加分越少（对数衰减，防刷分）
-  - 评论越详细，加成越大（鼓励认真评价）
-  - 负面评价不衰减（始终全额扣分）
-- **信誉等级**：新手(0-20) → 帮助者(20-50) → 可信赖(50-80) → 专家(80+)
-- **信誉上链**：一键将信誉快照锚定至以太坊，生成可验证 JSON 证明
-
-### 6. 私信系统
-- 接受提议后，双方可进入私聊（入口在任务详情页）
-- 消息收件箱按对话分组，显示最后一条消息和未读数
-- 新消息自动触发站内通知
-
-### 7. 通知系统
-- 全局通知覆盖：帮助提议、接受/拒绝、任务完成、评价、支付、私信、管理员公告
-- 导航栏实时显示未读通知和未读私信角标
-- 支持单条标记已读 + 一键全部已读
-
-### 8. 搜索与发现
-- **全局搜索** (`/search`)：同时搜索求助（标题/描述/分类/地点）和用户（用户名/姓名/地点/技能），分页展示
-- **排行榜** (`/leaderboard`)：信誉分排行 Top20、帮助次数排行、求助完成排行
-- **志愿专区** (`/volunteer`)：专属筛选仅志愿类型的求助，支持分类/地点/日期筛选
-- **附近的人** (`/nearby`)：基于 Haversine 公式计算距离，按半径/信誉/技能筛选附近用户
-
-### 9. 举报系统
-- 举报对象：用户、求助、评价
-- 填写举报原因，提交后进入管理员审核队列
-
-### 10. AI 智能助手
-- **聊天页面** (`/chatbot`)：与 AI 助手"小美"对话
-- **API 接口** (`/api/chatbot`)：调用 Kimi (Moonshot) API，保留最近 10 轮上下文
-
-### 11. 钱包与 Web3
-- **连接 MetaMask** (`/connect-wallet`)：绑定以太坊钱包到用户账号
-- **钱包验证**：challenge-response 签名验证协议（防伪造）
-- **我的钱包** (`/my-wallets`)：查看已绑定钱包列表
-- **Web3 状态** (`/web3`)：查看 Sepolia 链连接状态、查询地址余额、手动上链
-
-### 12. 灵魂绑定代币 (SBT)
-- **Merkle Proof Mint**：信誉分≥20 且已绑定钱包的用户，可在个人主页免费铸造 SBT
-- **三级等级**：🥉 铜牌（≥20）→ 🥈 银牌（≥50）→ 🥇 金牌（≥80）
-- **自动升级**：信誉提升后可重新申领升级
-- **链上查看**：个人主页自动显示链上 SBT 等级
-- **不可转让**：合约禁止 transfer（灵魂绑定）
-
-### 13. DAO 社区仲裁
-- **仲裁大厅** (`/arbitration`)：信誉分≥80 的金牌用户导航栏自动解锁入口
-- **争议列表**：展示所有 Disputed 状态的任务
-- **链上投票**：唤起 MetaMask 调用 TaskEscrow.voteOnDispute（支持打款 / 支持退款）
-- **跨合约校验**：合约自动验证投票者是否持有金牌 SBT
-- **自动执行**：票数达到阈值（可配置，默认 1 票）自动划转资金
-
-## 核心功能 — 管理员端
-
-管理员登录后导航栏仅显示"管理后台 + 退出"，所有管理功能统一从 `/admin` 进入。管理员**不能**发布求助、提供帮助等用户级操作。
-
-### 1. 管理后台首页 (`/admin`)
-- 平台总览统计：用户数、总求助数、待匹配数、已完成数、举报数
-- 近期注册用户列表
-- 活动日志（最近 12 条 Statement 审计记录）
-- 所有管理功能入口按钮
-
-### 2. 用户管理 (`/admin/users`)
-- 搜索用户（用户名/邮箱/姓名）
-- 拉黑用户（支持填写原因）/ 取消拉黑
-- 删除用户（不可撤销，需二次确认）
-- 所有操作记录区块链审计日志
-
-### 3. 求助管理 (`/admin/requests`)
-- 查看所有求助列表（标题、发布者、分类、状态、价格、时间）
-- 按关键词搜索 + 按状态筛选（待匹配/进行中/已完成/已取消）
-- 分页浏览
-- **管理员关闭任务**：一键关闭违规/争议求助，自动拒绝相关帮助提议，通知求助者和帮助者
-
-### 4. 举报审核 (`/admin/moderation`)
-- **举报处理**：查看待处理举报，通过（自动惩罚违规内容）或驳回
-
-### 5. 支付记录 (`/admin/payments`)
-- 查看所有支付记录（求助者→帮助者、金额、收款地址、交易哈希、状态）
-- 按状态筛选（待支付/已支付）
-- 交易哈希直接链接到 Etherscan 区块浏览器
-
-### 6. 发布公告 (`/admin/broadcast`)
-- 输入公告内容，一键群发给所有普通用户
-- 以站内通知形式推送到每位用户的通知列表
-- 记录区块链审计日志
-
-### 7. 数据导出
-- **导出用户** (`/admin/export/users`)：下载包含 ID、用户名、邮箱、全名、类型、信誉分、黑名单状态、注册时间的 CSV 文件
-- **导出求助** (`/admin/export/requests`)：下载包含 ID、标题、发布者、分类、状态、价格、志愿标记、创建时间的 CSV 文件
-- UTF-8 + BOM 编码，兼容 Excel 中文显示
-
-### 8. 区块链与 Web3
-- **区块链浏览器** (`/blockchain/blocks`)：查看内部审计链区块列表 → 区块详情 → Statement 详情
-- **Web3 状态** (`/web3`)：查看 Sepolia 链连接状态、查询地址余额、手动提交锚定交易
-
-### 9. SBT 信誉代币管理 (`/admin/sbt`)
-- 查看所有合格用户（信誉≥20 且已绑定钱包）及其 SBT 等级
-- 一键生成 Merkle Root 并上链至 ReputationSBT 合约
-- 上链操作记录审计日志
-
-## 底层系统
-
-| 模块 | 说明 |
-|---|---|
-| **内部审计链** | 所有关键操作（注册/登录/发布/接受/支付/评价/管理操作等）记录为 `Statement`，每达到阈值（默认 10 条）自动封装为 `Block`（含 `prev_hash → hash` 哈希链） |
-| **以太坊锚定** | 封块后可将 Block 哈希锚定至 Sepolia 测试网（可通过 `BLOCKCHAIN_ANCHOR_AUTO` 环境变量控制自动/手动） |
-| **HTTP 请求审计** | 每个 HTTP 请求自动记录为 Statement（方法、路径、IP、UA、Referer） |
-| **CSRF 保护** | Flask-WTF 全局 CSRF 令牌校验 |
-| **角色隔离** | 管理员与普通用户导航栏和功能完全分离，管理员无法执行用户级操作 |
-| **自定义错误页** | 404 / 500 自定义错误页面 |
-
-## 数据模型
-
-```
-User ──────┬──> HelpRequest ──> HelpOffer ──> Review
-           │         │              │
-           │         v              │
-           │      Payment <─────────┘
-           │
-           ├──> WalletLink (MetaMask 绑定)
-           ├──> Message (私信)
-           ├──> Notification (通知)
-           └──> Statement ──> Block (内部区块链)
-
-独立模型：Flag、PasswordResetToken
-```
-
-| 模型 | 说明 |
-|---|---|
-| `User` | 用户（含信誉分、经纬度、黑名单状态、用户类型） |
-| `HelpRequest` | 求助请求（open → in_progress → completed / cancelled / disputed） |
-| `HelpOffer` | 帮助提议（pending → accepted / rejected → completed） |
-| `Review` | 双向评价（1-5 星 + 评论） |
-| `Payment` | 支付记录（address_submitted → paid） |
-| `Message` | 私信消息 |
-| `Notification` | 站内通知（含管理员公告类型 `admin_broadcast`） |
-| `WalletLink` | MetaMask 钱包绑定 |
-| `Block` | 内部区块链区块 |
-| `Statement` | 区块链审计日志条目 |
-| `Flag` | 举报记录 |
-| `PasswordResetToken` | 密码重置令牌 |
-
-## 项目结构
+## 三、整体架构
 
 ```text
-Kaspersky-519-WT-05-main/
-├─ app.py                    # Flask 应用工厂 + Blueprint 注册 + 端点别名兼容
-├─ config.py                 # 环境配置（SECRET_KEY、DB、Web3、日志等）
-├─ models.py                 # 数据模型（12 个模型类）
-├─ forms.py                  # WTForms 表单定义（15 个表单类）
-├─ extensions.py             # db / login_manager / csrf 扩展实例
-├─ blockchain_service.py     # 内部审计链写入与封块逻辑
-├─ web3_service.py           # Web3 客户端初始化与链上锚定
-├─ watch_blocks.py           # 区块观察工具（live mining）
-├─ create_admin.py           # 创建默认管理员账号
-├─ merkle_service.py         # Merkle Tree 生成 + Proof 查询 + 上链
-├─ seed_demo_data.py         # 灌入演示数据（答辩用）
-├─ routes/                   # ← 8 个 Blueprint 模块
-│  ├─ auth.py               #   注册/登录/密码重置
-│  ├─ main.py               #   首页/仪表盘/搜索/排行榜/志愿/附近
-│  ├─ features.py           #   任务发布/市场/帮助/详情/评价/举报
-│  ├─ admin.py              #   管理后台全功能
-│  ├─ profile.py            #   个人主页/编辑/头像
-│  ├─ messages.py           #   私信收件箱/聊天
-│  ├─ blockchain.py         #   区块浏览器/信誉锚定
-│  ├─ api.py                #   钱包/SBT/Escrow/AI 聊天
-│  └─ helpers.py            #   共享工具函数
-├─ tests/                    # ← 测试套件
-│  └─ test_routes.py        #   100 个 pytest 集成测试
-├─ contracts/                # Hardhat 智能合约项目
-│  ├─ src/
-│  │  ├─ ReputationSBT.sol     #   灵魂绑定信誉代币 (ERC-721 SBT)
-│  │  └─ TaskEscrow.sol        #   任务资金托管 + DAO 仲裁
-│  ├─ abi/                    #   合约 ABI（后端交互用）
-│  ├─ scripts/deploy.js       #   部署脚本
-│  ├─ hardhat.config.js       #   Hardhat 配置
-│  └─ package.json            #   Node 依赖
-├─ scripts/
-│  └─ migrate_sqlite.py      # SQLite 增量迁移脚本
-├─ templates/                # Jinja2 页面模板
-│  ├─ base.html              #   全局基础模板（导航栏、角色隔离、Ethers.js CDN）
-│  ├─ auth/                  #   注册 / 登录 / 密码重置
-│  ├─ features/              #   求助 / 帮助 / 市场 / 详情 / 志愿 / 仲裁大厅
-│  ├─ admin/                 #   管理后台（首页 / 用户 / 求助 / 审核 / 支付 / 公告 / SBT）
-│  ├─ blockchain/            #   区块浏览器
-│  ├─ messages/              #   私信收件箱 / 聊天
-│  ├─ profile/               #   个人主页 / 编辑（含 SBT 状态）
-│  ├─ wallet/                #   钱包绑定
-│  └─ web3/                  #   Web3 状态
-├─ static/
-│  ├─ css/main.css           # 编译后的主样式表
-│  ├─ js/main.js             # 客户端 JavaScript
-│  └─ js/web3-integration.js # SBT/Escrow/DAO 前端交互 (Ethers.js)
-├─ assets/scss/              # SCSS 源文件
-├─ requirements.txt          # 完整依赖（锁定版本）
-├─ run_app.bat               # 启动应用（含环境变量 + 合约地址）
-├─ run_block1.bat             # 启动区块观察工具
-└─ run_migration.bat          # 执行数据库迁移
+浏览器
+  │
+  │ HTTP / Form / Fetch / MetaMask
+  ▼
+Flask 应用
+  │
+  ├── routes/auth.py          用户注册、登录、密码相关
+  ├── routes/main.py          首页、仪表盘、排行榜、申诉等
+  ├── routes/features.py      求助、市场、详情、帮助申请、评价、举报
+  ├── routes/admin.py         管理后台、用户、支付、申诉、SBT 管理
+  ├── routes/profile.py       用户主页和资料
+  ├── routes/messages.py      私信系统
+  ├── routes/blockchain.py    内部审计链浏览
+  └── routes/api.py           钱包、SBT、Escrow、AI、Web3 API
+  │
+  ├── models.py               SQLAlchemy 数据模型
+  ├── forms.py                WTForms 表单
+  ├── blockchain_service.py   内部审计链
+  ├── web3_service.py         后端 Web3 交互
+  └── merkle_service.py       SBT Merkle Proof
+  │
+  ├── SQLite 数据库
+  │     ├── User
+  │     ├── HelpRequest
+  │     ├── HelpOffer
+  │     ├── Payment
+  │     ├── Review
+  │     ├── WalletLink
+  │     ├── Statement
+  │     ├── Block
+  │     └── Appeal
+  │
+  └── Sepolia 智能合约
+        ├── ReputationSBT.sol
+        └── TaskEscrow.sol
 ```
 
-## 快速开始
+---
 
-### 1) 环境要求
+## 四、核心业务流程
 
-- Python 3.11 或 3.12（Windows 开发建议）
-- pip 最新版本
+### 4.1 普通互助流程
 
-### 2) 创建并激活虚拟环境（Windows）
+```text
+用户注册 / 登录
+  ↓
+发布求助 HelpRequest(open)
+  ↓
+其他用户提交帮助申请 HelpOffer(pending)
+  ↓
+求助者接受某个申请 HelpOffer(accepted)
+  ↓
+任务进入进行中 HelpRequest(in_progress)
+  ↓
+帮助者完成服务
+  ↓
+求助者确认完成 / 释放赏金
+  ↓
+HelpRequest(completed)
+  ↓
+双方评价
+```
 
-```bat
+### 4.2 付费任务 Escrow 流程
+
+付费任务不是简单记录“待支付/已支付”，而是通过 `TaskEscrow` 合约托管资金。
+
+```text
+求助者接受帮助申请
+  ↓
+前端调用 TaskEscrow.createEscrow(taskId, helper)
+  ↓
+ETH 锁入合约
+  ↓
+后端同步 HelpRequest(in_progress)
+  ↓
+任务完成后：
+  ├── 求助者认可 → releaseToHelper → 帮助者收款
+  └── 出现争议 → raiseDispute → DAO 仲裁
+```
+
+### 4.3 DAO 仲裁流程
+
+```text
+任务进入争议 HelpRequest(disputed)
+  ↓
+金牌 SBT 用户进入仲裁大厅
+  ↓
+调用 voteOnDispute(taskId, choice)
+  ↓
+达到投票阈值后合约自动结算
+  ↓
+结果一：PayHelper
+      - 资金扣除手续费后打给帮助者
+      - 后端同步 Payment(paid)
+      - HelpRequest(completed)
+
+结果二：RefundRequester
+      - 资金扣除手续费后退给求助者
+      - 后端同步 Payment(refunded)
+      - HelpRequest(cancelled)
+```
+
+---
+
+## 五、关键数据模型
+
+### 5.1 User
+
+用户模型，包含登录信息、信誉分、角色、黑名单状态、头像、地理位置和个人资料。
+
+关键字段：
+
+- `username`
+- `email`
+- `password_hash`
+- `reputation_score`
+- `user_type`
+- `is_blacklisted`
+- `lat`
+- `lng`
+- `skills`
+
+### 5.2 HelpRequest
+
+求助任务模型，是平台业务的核心。
+
+关键字段：
+
+- `title`
+- `description`
+- `category`
+- `location`
+- `price`
+- `is_volunteer`
+- `status`
+
+状态含义：
+
+| 状态 | 含义 |
+|---|---|
+| `open` | 已发布，等待帮助者申请 |
+| `in_progress` | 已接受帮助，任务进行中 |
+| `completed` | 任务完成，资金已支付给帮助者 |
+| `cancelled` | 任务取消，或仲裁退款给求助者 |
+| `disputed` | 任务争议中，等待仲裁 |
+
+### 5.3 HelpOffer
+
+帮助申请模型。
+
+状态含义：
+
+| 状态 | 含义 |
+|---|---|
+| `pending` | 等待求助者处理 |
+| `accepted` | 已被接受 |
+| `rejected` | 已被拒绝 |
+| `completed` | 对应帮助最终完成 |
+
+### 5.4 Payment
+
+支付记录模型，用于记录链下支付或链上 Escrow 同步后的结算结果。
+
+状态含义：
+
+| 状态 | 含义 |
+|---|---|
+| `address_submitted` | 帮助者已提交收款地址，等待支付 |
+| `paid` | 已支付给帮助者 |
+| `refunded` | 仲裁后已退款给求助者 |
+
+需要特别注意：字段名 `helper_address` 历史上表示“收款地址”。为了兼容旧模型，在退款场景下该字段保存“退款地址”。管理员页面已改为显示“收款/退款地址”。
+
+### 5.5 WalletLink
+
+钱包绑定模型，用于保存用户绑定和验证过的钱包地址。
+
+### 5.6 Statement / Block
+
+内部审计链模型。关键业务操作会写入 `Statement`，多个 Statement 可以封装成 `Block`，形成 SQLite 内部哈希链，并可选锚定到 Sepolia。
+
+### 5.7 Appeal
+
+黑名单申诉模型。黑名单用户可以提交申诉，管理员可以审核通过或拒绝。
+
+---
+
+## 六、智能合约说明
+
+### 6.1 ReputationSBT.sol
+
+`ReputationSBT` 是灵魂绑定信誉凭证合约，主要用途是把平台信誉等级映射为链上不可转让 SBT。
+
+特点：
+
+- ERC-721 形式。
+- 不允许普通转账。
+- 使用 Merkle Proof 控制 Mint 资格。
+- 支持不同信誉等级。
+- 仲裁合约通过它判断用户是否具备金牌仲裁资格。
+
+### 6.2 TaskEscrow.sol
+
+`TaskEscrow` 是任务资金托管合约。
+
+核心状态：
+
+| 链上状态 | 数值 | 含义 |
+|---|---:|---|
+| `None` | 0 | 不存在 |
+| `Locked` | 1 | 资金已锁定 |
+| `Completed` | 2 | 求助者主动释放给帮助者 |
+| `Disputed` | 3 | 争议中 |
+| `Resolved` | 4 | 仲裁已解决 |
+
+投票选择：
+
+| 选择 | 数值 | 含义 |
+|---|---:|---|
+| `None` | 0 | 未投票 |
+| `PayHelper` | 1 | 支持打款给帮助者 |
+| `RefundRequester` | 2 | 支持退款给求助者 |
+
+核心函数：
+
+- `createEscrow(taskId, helper)`
+- `releaseToHelper(taskId)`
+- `raiseDispute(taskId)`
+- `voteOnDispute(taskId, choice)`
+- `getEscrow(taskId)`
+- `setFeeBasisPoints(fee)`
+- `withdrawFees(to)`
+
+### 6.3 手续费规则
+
+当前合约设计为：无论资金最终给帮助者，还是仲裁退款给求助者，都扣除平台手续费。
+
+也就是说：
+
+```text
+托管金额：1 ETH
+手续费率：5%
+实际到账：0.95 ETH
+平台手续费：0.05 ETH
+```
+
+该逻辑在合约中通过 `_deductFee(e.amount)` 实现，帮助者胜出和求助者胜出都会调用该函数。
+
+这是当前项目确认采用的业务规则，因此不需要修改合约。
+
+---
+
+## 七、Escrow / 支付 / 仲裁状态映射
+
+这部分是项目中最关键、也是最容易出错的业务逻辑。
+
+### 7.1 链上状态到后端状态
+
+| 链上动作 | 链上状态 | 后端 HelpRequest | Payment | 说明 |
+|---|---|---|---|---|
+| `createEscrow` | `Locked` | `in_progress` | 可无记录 | 赏金已锁定 |
+| `releaseToHelper` | `Completed` | `completed` | `paid` | 求助者主动释放赏金 |
+| `raiseDispute` | `Disputed` | `disputed` | 不改变或暂无 | 进入仲裁 |
+| 仲裁 `PayHelper` | `Resolved` | `completed` | `paid` | 仲裁判帮助者胜 |
+| 仲裁 `RefundRequester` | `Resolved` | `cancelled` | `refunded` | 仲裁判求助者胜 |
+
+### 7.2 为什么不能只看链上 status
+
+链上 `Resolved` 只表示“仲裁已经解决”，但不表示“谁赢了”。
+
+错误逻辑是：
+
+```text
+status == Resolved
+  ↓
+显示支付成功
+```
+
+正确逻辑是：
+
+```text
+status == Resolved
+  ↓
+读取 votesForHelper 和 votesForRequester
+  ↓
+votesForHelper > votesForRequester
+    → 帮助者胜出，显示支付成功
+  ↓
+votesForRequester >= votesForHelper
+    → 求助者胜出，显示仲裁退款
+```
+
+本项目已经修复该问题。
+
+---
+
+## 八、本次重点修复内容
+
+### 8.1 修复仲裁退款仍显示“支付成功”
+
+原问题：
+
+- 详情页把链上 `status === 4` 直接当成“Escrow 已结算给帮助者”。
+- 但 `status === 4` 实际只代表“争议已裁决”。
+- 如果裁决结果是退款给求助者，页面仍然显示支付成功，业务含义错误。
+
+修复后：
+
+- `status === 2`：求助者主动释放，显示“已打款给帮助者”。
+- `status === 4` 且帮助者票数更多：显示“仲裁打款给帮助者”。
+- `status === 4` 且求助者票数更多或相等：显示“仲裁退款给求助者”。
+
+涉及文件：
+
+- `templates/features/request_detail.html`
+- `templates/features/arbitration.html`
+- `routes/api.py`
+
+### 8.2 后端不再盲信前端 outcome
+
+原问题：
+
+- 前端调用 `/api/escrow/sync` 时传入 `outcome`。
+- 后端直接根据前端传入的 `outcome` 修改数据库。
+- 如果有人伪造请求，理论上可以把数据库同步成错误状态。
+
+修复后：
+
+- 当 `action == "resolve"` 时，后端会调用链上 `getEscrow(taskId)`。
+- 后端确认链上状态必须是 `Resolved`。
+- 后端根据链上票数决定结果。
+- 前端传入的 `outcome` 不再作为仲裁结果的可信来源。
+
+这是非常重要的安全修复。
+
+### 8.3 退款也创建 Payment 记录
+
+原问题：
+
+- 只有帮助者胜出时创建 `Payment(status='paid')`。
+- 求助者胜出时，如果没有已有 Payment，后台可能没有清晰记录。
+
+修复后：
+
+- 求助者胜出也会创建或更新 `Payment(status='refunded')`。
+- 管理员可以在支付记录中看到“已退款”。
+- 详情页可以根据 `refunded` 正确显示退款状态。
+
+### 8.4 管理后台支付页支持 refunded
+
+原问题：
+
+- 管理员支付页只认识“待支付”和“已支付”。
+- 仲裁退款无法准确展示。
+
+修复后：
+
+- 筛选项新增“已退款”。
+- 状态列新增“已退款”徽章。
+- 地址列改为“收款/退款地址”。
+
+涉及文件：
+
+- `templates/admin/payments.html`
+
+### 8.5 防止 Escrow 付费任务被普通取消
+
+原问题：
+
+- 付费任务进入 `in_progress` 后，赏金可能已经锁入 Escrow。
+- 如果此时允许普通取消，数据库会变成取消状态，但链上资金仍然锁着。
+- 这会造成链上和数据库严重不一致。
+
+修复后：
+
+- 付费且非志愿任务进入 `in_progress` 后，不能走普通取消。
+- 必须通过：
+  - 求助者释放赏金。
+  - 或进入仲裁，由合约退款/打款。
+
+涉及文件：
+
+- `routes/features.py`
+- `templates/features/request_detail.html`
+
+### 8.6 链上状态读取失败时不再显示危险按钮
+
+原问题：
+
+- 如果前端读取链上状态失败，会同时显示“释放赏金 / 发起仲裁 / 锁定赏金”等按钮。
+- 这容易造成误操作。
+
+修复后：
+
+- 如果无法读取链上 Escrow 状态，页面只显示错误提示。
+- 不再展示资金操作按钮。
+
+---
+
+## 九、黑名单与申诉机制
+
+项目已经补充黑名单相关治理能力。
+
+### 9.1 黑名单限制
+
+黑名单用户会被限制执行以下操作：
+
+- 发送私信。
+- 提交评价。
+- 举报内容。
+- 提交支付地址。
+
+登录时会提示用户当前处于黑名单状态，并提供申诉入口。
+
+### 9.2 申诉流程
+
+```text
+黑名单用户
+  ↓
+访问申诉页面
+  ↓
+提交申诉理由
+  ↓
+管理员后台查看申诉
+  ↓
+管理员审核通过或拒绝
+  ↓
+通过后解除黑名单
+```
+
+涉及文件：
+
+- `models.py`
+- `forms.py`
+- `routes/main.py`
+- `routes/admin.py`
+- `templates/appeal.html`
+- `templates/admin/appeals.html`
+
+---
+
+## 十、志愿服务页面整合
+
+项目原本存在独立 `/volunteer` 页面，但其功能和市场页面高度重复。
+
+当前设计为：
+
+- 志愿服务不再作为完全独立的信息架构。
+- 志愿任务整合到 `/marketplace`。
+- 市场页面支持志愿筛选和志愿统计展示。
+- `/volunteer` 路由可重定向到市场页的志愿筛选结果。
+
+这样可以减少重复页面，避免同一类任务在两个入口维护两套逻辑。
+
+---
+
+## 十一、项目亮点
+
+### 11.1 完整的互助交易闭环
+
+项目覆盖了从发布求助到评价结束的完整流程，并且包含异常处理：
+
+- 发布求助。
+- 帮助申请。
+- 接受申请。
+- 私信沟通。
+- 任务执行。
+- 支付或托管。
+- 仲裁。
+- 评价。
+- 举报。
+- 黑名单。
+- 申诉。
+
+### 11.2 Web2 + Web3 混合架构
+
+项目不是为了上链而上链，而是把链上能力放在真正需要可信执行的地方：
+
+- 钱包绑定。
+- SBT 信誉凭证。
+- Escrow 资金托管。
+- DAO 仲裁。
+- 审计锚定。
+
+普通列表、搜索、聊天、后台管理仍然留在传统 Web 后端，提高开发效率和用户体验。
+
+### 11.3 内部审计链
+
+除了 Sepolia 合约，项目还有内部 `Statement → Block` 审计链。
+
+关键操作会记录为 Statement，例如：
+
+- 用户注册。
+- 登录。
+- 发布求助。
+- 接受帮助。
+- 支付同步。
+- 仲裁同步。
+- 管理员操作。
+
+这使项目具备较好的可追溯性。
+
+### 11.4 SBT 仲裁资格控制
+
+仲裁不是任意用户都能参与，而是通过 ReputationSBT 进行资格判断。
+
+只有具备对应信誉等级的用户才能进行仲裁投票，提高了仲裁可信度。
+
+---
+
+## 十二、当前仍需注意的风险
+
+### 12.1 没有数据库迁移框架
+
+项目目前主要依赖 `db.create_all()` 或脚本迁移。
+
+风险：
+
+- 修改模型后，旧数据库不会自动新增字段。
+- 演示环境和开发环境可能出现结构不一致。
+
+建议：
+
+- 引入 Flask-Migrate / Alembic。
+- 或在答辩前固定使用全新初始化数据库。
+
+### 12.2 Payment 模型字段命名存在历史包袱
+
+`Payment.helper_address` 在退款场景下保存退款地址，字段名不够准确。
+
+当前为了兼容旧数据库没有改字段名，但更合理的长期设计是：
+
+- `recipient_address`
+- `recipient_role`
+- `settlement_type`
+
+### 12.3 Escrow 合约变更需要重新部署
+
+当前合约规则已经确认：
+
+- 帮助者胜出扣手续费。
+- 求助者退款也扣手续费。
+
+如果未来要改成“退款不扣手续费”，必须修改合约、重新测试、重新部署，并更新前端合约地址。
+
+### 12.4 后端链上同步依赖 RPC
+
+现在后端会验证链上仲裁结果，这是正确的安全策略，但也意味着：
+
+- RPC 配置错误会导致同步失败。
+- Sepolia 节点不可用会影响页面状态同步。
+
+建议：
+
+- 使用稳定 RPC 服务。
+- 在生产环境增加重试和后台任务同步。
+
+### 12.5 前端仍是传统模板模式
+
+项目采用 Jinja2 服务端渲染，适合课程项目和快速开发。
+
+但 Web3 状态交互比较复杂，长期可以考虑：
+
+- 用 Alpine.js 简化状态管理。
+- 或将 Web3 交互页面拆成更独立的前端组件。
+
+---
+
+## 十三、建议演示顺序
+
+### 13.1 基础平台能力
+
+1. 注册 / 登录。
+2. 发布求助。
+3. 市场筛选。
+4. 提交帮助申请。
+5. 接受帮助。
+6. 私信沟通。
+
+### 13.2 Web3 能力
+
+1. 绑定钱包。
+2. 查看 SBT 资格。
+3. 创建 Escrow 托管。
+4. 释放赏金。
+5. 查看支付记录。
+
+### 13.3 仲裁能力
+
+1. 发起争议。
+2. 金牌用户进入仲裁大厅。
+3. 投票支持帮助者或求助者。
+4. 达到阈值后自动结算。
+5. 展示详情页正确显示：
+   - 打款给帮助者。
+   - 或退款给求助者。
+
+### 13.4 治理能力
+
+1. 管理员拉黑用户。
+2. 黑名单用户登录看到提示。
+3. 用户提交申诉。
+4. 管理员审核申诉。
+
+### 13.5 审计能力
+
+1. 查看内部区块链浏览器。
+2. 展示 Statement。
+3. 展示 Block 哈希链。
+4. 展示可选 Sepolia 锚定。
+
+---
+
+## 十四、关键文件索引
+
+| 文件 | 职责 |
+|---|---|
+| `app.py` | Flask 应用工厂、Blueprint 注册、兼容路由 |
+| `models.py` | 数据模型 |
+| `forms.py` | 表单定义 |
+| `routes/features.py` | 求助、市场、任务详情、申请、取消、评价、举报 |
+| `routes/api.py` | 钱包、支付、Escrow 同步、SBT、Web3、AI |
+| `routes/admin.py` | 管理后台、支付、申诉、用户治理 |
+| `routes/main.py` | 首页、仪表盘、排行榜、申诉入口 |
+| `routes/messages.py` | 私信系统 |
+| `routes/blockchain.py` | 内部审计链浏览 |
+| `templates/features/request_detail.html` | 任务详情、支付状态、Escrow 操作展示 |
+| `templates/features/arbitration.html` | 仲裁大厅 |
+| `templates/admin/payments.html` | 管理员支付记录 |
+| `contracts/src/TaskEscrow.sol` | Escrow 托管和仲裁合约 |
+| `contracts/src/ReputationSBT.sol` | 信誉 SBT 合约 |
+| `static/js/web3-integration.js` | 前端 Web3 交互 |
+| `blockchain_service.py` | 内部审计链 |
+| `web3_service.py` | 后端 Web3 服务 |
+| `merkle_service.py` | SBT Merkle Proof |
+
+---
+
+## 十五、环境与运行
+
+### 15.1 Python 环境
+
+```powershell
 python -m venv myenv
-myenv\Scripts\activate
-```
-
-### 3) 安装依赖
-
-```bat
+.\myenv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 4) 创建管理员账号
+### 15.2 初始化数据
 
-```bat
+```powershell
 python create_admin.py
-```
-
-> 应用首次运行会自动执行 `db.create_all()` 创建所有表。
-
-### 5) 灌入演示数据（推荐）
-
-```bat
 python seed_demo_data.py
 ```
 
-该脚本会创建多个测试用户、求助任务、帮助提议、评价和私信，方便直接体验完整流程。详见 [演示数据](#演示数据) 章节。
+### 15.3 启动项目
 
-### 6) 启动应用
-
-**方式一**（推荐，使用批处理脚本，自动配置环境变量）：
-
-```bat
-run_app.bat
-```
-
-**方式二**（直接启动）：
-
-```bat
+```powershell
 python app.py
 ```
 
-启动后访问：**http://127.0.0.1:5000**
+或：
 
-## 演示数据
+```powershell
+.\run_app.bat
+```
 
-运行 `python seed_demo_data.py` 后，系统中将包含以下预置数据：
+默认访问：
 
-### 测试账号
+```text
+http://127.0.0.1:5000
+```
 
-| 角色 | 用户名 | 邮箱 | 密码 |
-|---|---|---|---|
-| 管理员 | `admin` | `admin@dailyhelper.com` | `admin123` |
-| 求助者 | `alice` | `alice@test.com` | `test123` |
-| 帮助者 | `bob` | `bob@test.com` | `test123` |
-| 帮助者 | `charlie` | `charlie@test.com` | `test123` |
-| 普通用户 | `diana` | `diana@test.com` | `test123` |
-| 普通用户 | `eve` | `eve@test.com` | `test123` |
-| 金牌专家 | `expert1` | `expert1@test.com` | `test123` |
-| 金牌专家 | `expert2` | `expert2@test.com` | `test123` |
-| 金牌专家 | `expert3` | `expert3@test.com` | `test123` |
+### 15.4 合约测试
 
-### 预置内容
+需要在 `contracts` 目录下执行：
 
-- **7 条求助**（覆盖不同分类、付费/志愿、不同状态，含 1 条 disputed 仲裁任务）
-- **9 条帮助提议**（覆盖 pending/accepted/completed/rejected 状态）
-- **4 条评价**（含不同星级和评论长度，信誉分已按对数公式计算）
-- **3 个金牌专家用户**（信誉分 85，可测试 DAO 仲裁投票）
-- **6 个钱包绑定**（alice/bob/charlie + 3 个专家，可测试 SBT Mint）
-- **私信对话**（alice 与 bob 之间的任务沟通消息）
-- **1 个已完成的支付记录**（含收款地址和交易哈希）
-- **1 条举报**（待管理员处理）
+```powershell
+npm install
+npx hardhat test
+```
 
-## 配置说明
+---
 
-通过环境变量覆盖默认配置（`config.py`），也可在 `run_app.bat` 中修改：
+## 十六、答辩时可以强调的点
 
-| 变量名 | 默认值 | 说明 |
-|---|---|---|
-| `SECRET_KEY` | `change-this-in-production` | Flask 会话与安全密钥 |
-| `DATABASE_URL` | `sqlite:///app.db` | SQLAlchemy 连接串 |
-| `LOG_LEVEL` | `INFO` | 日志级别 |
-| `ETH_RPC_URL` | Sepolia Infura | Web3 RPC 地址 |
-| `ETH_CHAIN_NAME` | `sepolia` | 链名称 |
-| `ETH_CHAIN_ID` | `11155111` | 链 ID |
-| `ETH_SIGNER_PRIVATE_KEY` | 已配置测试密钥 | 链上签名私钥（**勿泄露**） |
-| `BLOCKCHAIN_ANCHOR_AUTO` | `false` | 是否自动上链锚定（`true` 可能导致请求变慢） |
-| `BLOCK_SIZE` | `10` | 内部审计链封块阈值（多少条 Statement 封一个 Block） |
-| `ETH_WAIT_FOR_RECEIPT` | `true` | 上链后是否等待交易确认 |
-| `ETH_TX_TIMEOUT_SECONDS` | `180` | 等待交易确认的超时时间（秒） |
-| `ETH_EXPLORER_TX_BASE_URL` | `https://sepolia.etherscan.io/tx` | 区块浏览器交易链接前缀 |
-| `SBT_CONTRACT_ADDRESS` | 已部署 Sepolia 地址 | ReputationSBT 合约地址 |
-| `ESCROW_CONTRACT_ADDRESS` | 已部署 Sepolia 地址 | TaskEscrow 合约地址 |
-| `DAO_VOTE_THRESHOLD` | `1` | DAO 仲裁投票阈值（生产环境建议≥3） |
-| `MOONSHOT_API_KEY` | - | Kimi AI 助手 API Key |
+### 16.1 项目不是简单 CRUD
 
-## 页面路由一览
+项目包含完整业务状态机，尤其是：
 
-### 公开页面（无需登录）
+- 求助状态。
+- 帮助申请状态。
+- 支付状态。
+- Escrow 链上状态。
+- 仲裁结果状态。
+
+这些状态必须互相映射，否则就会出现“链上退款但页面显示支付成功”的严重问题。
+
+### 16.2 资金结果以后端链上验证为准
+
+本项目已经修复为：
+
+- 前端只负责触发和展示。
+- 后端同步仲裁结果时必须读取链上状态。
+- 数据库状态不能只相信前端传参。
+
+这体现了 Web3 项目中非常重要的原则：
+
+```text
+前端不可信，链上结果才可信。
+```
+
+### 16.3 仲裁退款也扣手续费是明确业务规则
+
+当前合约设计为：
+
+- 打款给帮助者扣手续费。
+- 退款给求助者也扣手续费。
+
+这是平台服务费规则的一部分，不是 bug。
+
+### 16.4 平台治理闭环完整
+
+除了交易流程，项目还实现了治理能力：
+
+- 举报。
+- 黑名单。
+- 黑名单功能限制。
+- 用户申诉。
+- 管理员审核。
+
+这让平台不仅能交易，也能维护社区秩序。
+
+---
+
+## 十七、综合评价
+
+DailyHelper 项目已经具备较完整的产品形态和技术深度。它不是单一 Flask CRUD 应用，而是结合了：
+
+- 传统 Web 业务系统。
+- 区块链资金托管。
+- SBT 信誉凭证。
+- DAO 仲裁。
+- 内部审计链。
+- 管理后台。
+- 黑名单与申诉治理。
+
+本次重点修复后，Escrow、Payment、Arbitration 三者之间的状态映射更加一致，尤其修复了仲裁退款被误显示为支付成功的问题。
+
+当前项目适合作为毕业设计、课程项目或 Web3 应用原型进行展示。后续如果要继续提升，优先方向应是：
+
+1. 引入数据库迁移体系。
+2. 为 Escrow 同步和仲裁状态增加自动化测试。
+3. 优化前端 Web3 状态管理。
+4. 将 Payment 模型升级为更通用的 Settlement 模型。
+5. 增加后台异步链上同步任务。
+
+---
+
+## 十八、给后续 AI 助手的上下文摘要
+
+如果后续由 AI 助手继续维护本项目，需要优先理解以下事实：
+
+1. 项目是 Flask Blueprint 架构，主要业务在 `routes/features.py` 和 `routes/api.py`。
+2. 任务主模型是 `HelpRequest`，申请模型是 `HelpOffer`，支付模型是 `Payment`。
+3. 付费任务使用 `TaskEscrow.sol` 托管资金。
+4. 链上 `Completed` 表示求助者主动释放赏金给帮助者。
+5. 链上 `Resolved` 只表示仲裁已结束，不代表一定支付给帮助者。
+6. 仲裁结果必须根据链上票数判断。
+7. 后端 `/api/escrow/sync` 在 `resolve` 时必须读取链上结果，不能信任前端 outcome。
+8. `Payment.status` 当前支持 `address_submitted`、`paid`、`refunded`。
+9. 仲裁退款也扣平台手续费，这是当前业务规则。
+10. 付费 `in_progress` 任务不能普通取消，否则会造成链上资金和数据库状态不一致。
+11. 黑名单用户已经被限制私信、评价、举报和提交支付地址。
+12. 用户可以通过申诉流程请求管理员解除黑名单。
+13. 修改模型后要注意 SQLite 无自动迁移问题。
+14. 前端 Web3 页面主要在 `request_detail.html`、`arbitration.html` 和 `static/js/web3-integration.js`。
+15. 项目文本和交互语言以中文为主。
+
+---
+
+## 十九、主要路由一览
+
+### 19.1 公开页面
 
 | 路由 | 说明 |
 |---|---|
@@ -456,53 +836,54 @@ python app.py
 | `/about` | 关于页面 |
 | `/signup` | 注册 |
 | `/login` | 登录 |
-| `/marketplace` | 帮助市场（多维筛选 + 分页） |
-| `/search` | 全局搜索（求助 + 用户） |
-| `/leaderboard` | 排行榜（信誉/帮助/完成三维排行） |
-| `/volunteer` | 志愿专区 |
+| `/marketplace` | 帮助市场，支持分类、地点、价格、志愿筛选 |
+| `/search` | 全局搜索 |
+| `/leaderboard` | 排行榜 |
+| `/volunteer` | 志愿服务入口，当前整合至市场页 |
 | `/u/<username>` | 用户公开主页 |
 | `/chatbot` | AI 智能助手 |
-| `/web3` | Web3 连接状态 / 手动上链 |
+| `/web3` | Web3 状态、余额查询、手动锚定 |
 
-### 用户页面（需登录）
+### 19.2 用户页面
 
 | 路由 | 说明 |
 |---|---|
-| `/dashboard` | 仪表盘（4 标签页：概览 / 资料 / 我的求助 / 我的帮助） |
+| `/dashboard` | 用户仪表盘 |
 | `/request-help` | 发布求助 |
 | `/offer-help` | 浏览可帮助的求助 |
-| `/requests/<id>` | 求助详情（提议 / 接受 / 完成 / 支付 / 评价全流程） |
-| `/requests/<id>/cancel` | 取消求助 |
-| `/my-offers` | 我的帮助记录（按状态分组） |
+| `/requests/<id>` | 求助详情，包含申请、接受、Escrow、支付、评价 |
+| `/requests/<id>/cancel` | 取消求助，付费 Escrow 进行中任务不可直接取消 |
+| `/my-offers` | 我的帮助记录 |
 | `/messages` | 私信收件箱 |
-| `/messages/<user_id>` | 与指定用户的私聊对话 |
+| `/messages/<user_id>` | 与指定用户私聊 |
 | `/notifications` | 通知列表 |
-| `/notifications/<id>/read` | 标记通知已读 |
-| `/notifications/read-all` | 一键全部已读 |
 | `/settings/profile` | 编辑个人资料 |
 | `/nearby` | 附近的人 |
-| `/flag` | 举报（用户/求助/评价） |
+| `/flag` | 举报 |
+| `/appeal` | 黑名单申诉 |
 | `/connect-wallet` | 绑定 MetaMask 钱包 |
 | `/my-wallets` | 我的钱包列表 |
-| `/blockchain/blocks` | 区块浏览器 |
+| `/blockchain/blocks` | 内部区块链浏览器 |
 | `/blockchain/reputation/anchor` | 信誉快照上链 |
 | `/blockchain/reputation/proof/<username>` | 可验证信誉 JSON |
+| `/arbitration` | DAO 仲裁大厅 |
 
-### 管理员页面（需管理员权限）
+### 19.3 管理员页面
 
 | 路由 | 说明 |
 |---|---|
-| `/admin` | 管理后台首页（总览统计 + 所有功能入口） |
-| `/admin/users` | 用户管理（搜索 / 拉黑 / 删除） |
-| `/admin/requests` | 求助管理（搜索 / 筛选 / 关闭任务） |
+| `/admin` | 管理后台首页 |
+| `/admin/users` | 用户管理、拉黑、解黑 |
+| `/admin/requests` | 求助管理 |
 | `/admin/moderation` | 举报审核 |
-| `/admin/payments` | 支付记录查看 |
-| `/admin/broadcast` | 发布公告（群发站内通知） |
-| `/admin/export/users` | 导出用户数据 CSV |
-| `/admin/export/requests` | 导出求助数据 CSV |
-| `/admin/sbt` | SBT 信誉代币管理（Merkle Root 上链） |
+| `/admin/payments` | 支付记录，支持待支付、已支付、已退款 |
+| `/admin/broadcast` | 发布公告 |
+| `/admin/appeals` | 用户申诉审核 |
+| `/admin/export/users` | 导出用户 CSV |
+| `/admin/export/requests` | 导出求助 CSV |
+| `/admin/sbt` | SBT 信誉代币管理 |
 
-### API 接口
+### 19.4 API 接口
 
 | 路由 | 方法 | 说明 |
 |---|---|---|
@@ -513,108 +894,371 @@ python app.py
 | `/wallet/verify` | POST | 钱包签名验证 |
 | `/web3/balance` | GET | 查询以太坊地址余额 |
 | `/api/sbt/proof` | GET | 获取当前用户的 Merkle Proof |
-| `/api/sbt/status/<addr>` | GET | 查询钱包地址的 SBT 状态 |
-| `/api/escrow/sync` | POST | Escrow 链上状态同步回调 |
+| `/api/sbt/status/<addr>` | GET | 查询钱包地址 SBT 状态 |
+| `/api/escrow/sync` | POST | Escrow 链上状态同步，仲裁 resolve 时以后端链上读取结果为准 |
 | `/api/contracts/config` | GET | 获取合约地址和链配置 |
-| `/arbitration` | GET | DAO 仲裁大厅（金牌用户） |
 
-## 答辩演示流程
+---
 
-以下是建议的答辩演示顺序，覆盖所有核心功能（约 15 分钟）：
+## 附录：全流程测试教程
 
-### 第一部分：用户与认证（2 分钟）
+> 按顺序执行以下步骤，可以完整体验所有 Web2 + Web3 功能。
 
-1. 打开首页，展示平台界面
-2. 展示注册页面（字段校验）
-3. 用 `alice / test123` 登录，展示仪表盘（4 标签页 + 快捷操作）
-4. 查看个人资料页（信誉分 + 评价 + 信誉上链按钮）
+---
 
-### 第二部分：任务全流程（5 分钟）
+## 0. 环境准备
 
-5. 用 alice 发布一条新求助（展示分类、地点、价格等字段）
-6. 退出，用 `bob / test123` 登录
-7. 在帮助市场找到 alice 的求助，展示筛选功能，提交帮助提议
-8. 退出，重新用 alice 登录
-9. 在求助详情页接受 bob 的提议（展示其他提议自动拒绝）
-10. 展示私聊入口，发一条消息给 bob
-11. 标记任务完成
+### 0.1 启动应用
 
-### 第三部分：支付与评价（3 分钟）
+```bash
+cd d:\bise\Kaspersky-519-WT-05-main
 
-12. 用 bob 登录，在任务详情页提交收款地址
-13. 用 alice 登录，上传交易哈希（展示支付状态流转）
-14. 双方互评（展示对数衰减信誉公式效果：高分用户加分更少）
+# 方式一：使用批处理（推荐，会自动设置环境变量）
+run_app.bat
 
-### 第四部分：区块链审计（2 分钟）
-
-15. 访问 `/blockchain/blocks`，展示区块列表
-16. 点进区块详情，查看 Statement 记录（各类操作审计日志）
-17. 展示信誉快照上链功能
-18. 访问 `/web3`，展示 Sepolia 连接状态，手动提交锚定交易
-
-### 第五部分：管理后台（2 分钟）
-
-19. 用 `admin / admin123` 登录，展示精简导航栏
-20. 管理后台首页：展示统计数据 + 功能入口
-21. 求助管理：查看所有求助，演示关闭任务
-22. 用户管理：演示拉黑/解黑
-23. 举报审核：处理举报
-24. 支付记录：查看链上支付详情
-25. 发布公告：群发站内通知
-26. 数据导出：下载 CSV 文件
-
-### 第六部分：Web3 智能合约（3 分钟）
-
-27. 用 admin 登录，进入管理后台 → SBT 管理，展示合格用户列表
-28. 点击"生成 Merkle Root 并上链"，展示链上交易成功
-29. 用 alice 登录，访问个人主页，展示 SBT 状态区域，点击"申领 SBT"铸造
-30. 用 expert1 登录，展示导航栏"仲裁大厅"入口，查看争议任务列表
-31. 对争议任务投票"支持打款"，展示 MetaMask 交互
-
-### 第七部分：其他亮点（1 分钟）
-
-32. 搜索功能（同时搜索求助和用户）
-33. 排行榜（三维排行）
-34. AI 智能助手（与"小美"对话）
-35. 志愿专区、附近的人（快速展示）
-
-## 常见问题
-
-### 登录/注册时报错：`Install 'email_validator' for email validation support`
-
-```bat
-pip install email-validator
-```
-
-该依赖已包含在 `requirements.txt` 中，确保已执行 `pip install -r requirements.txt`。
-
-### 页面卡顿/加载慢
-
-如果启用了自动上链（`BLOCKCHAIN_ANCHOR_AUTO=true`），每次封块会同步等待以太坊交易确认（最长 180 秒）。解决方案：
-
-- 在 `run_app.bat` 中设置 `BLOCKCHAIN_ANCHOR_AUTO=false`（推荐，当前已默认关闭）
-- 或增大 `BLOCK_SIZE`（如设为 100）减少封块频率
-- 或设置 `ETH_WAIT_FOR_RECEIPT=false` 不等待交易确认
-
-### 附近的人页面没有结果
-
-- 确认当前用户已在个人资料中填写经纬度
-- 确认筛选半径、最低信誉分与技能关键词是否过严
-
-### 如何重置数据库
-
-```bat
-del instance\app.db
-python create_admin.py
-python seed_demo_data.py
+# 方式二：手动启动
+myenv\Scripts\activate
 python app.py
 ```
 
-### AI 助手无回复
+应用地址：**http://127.0.0.1:5000**
 
-- 确认已配置 `MOONSHOT_API_KEY` 环境变量
-- 确认 API Key 有效且有剩余额度
+### 0.2 重置数据库（可选，从全新状态开始）
+
+```bash
+myenv\Scripts\python create_admin.py
+myenv\Scripts\python seed_demo_data.py
+```
+
+### 0.3 MetaMask 准备
+
+- 安装 MetaMask 浏览器扩展
+- 切换到 **Sepolia 测试网**
+- 确保账户有少量 Sepolia ETH（可从 [Sepolia Faucet](https://sepoliafaucet.com/) 领取）
+
+### 0.4 测试账号一览
+
+| 用户 | 邮箱 | 密码 | 角色 | 信誉分 |
+|------|------|------|------|--------|
+| admin | admin@dailyhelper.com | admin123 | 管理员 | 100 |
+| alice | alice@test.com | test123 | 普通用户 | 5.8 |
+| bob | bob@test.com | test123 | 普通用户 | 9.8 |
+| charlie | charlie@test.com | test123 | 普通用户 | 0 |
+| expert1 | expert1@test.com | test123 | 专家用户 | 85 |
+| expert2 | expert2@test.com | test123 | 专家用户 | 85 |
+| expert3 | expert3@test.com | test123 | 专家用户 | 85 |
+
+---
+
+## 第一部分：基础 Web2 功能
+
+### 1. 注册与登录
+
+1. 打开 http://127.0.0.1:5000/signup
+2. 注册一个新账号（如 `tester / tester@test.com / test123`）
+3. 注册成功后自动跳转到仪表盘
+4. 点击导航栏 **退出**
+5. 打开 http://127.0.0.1:5000/login，用刚才的账号登录
+6. 验证：成功进入仪表盘页面
+
+### 2. 个人资料编辑
+
+1. 点击导航栏 **我的资料**
+2. 点击 **编辑资料** 按钮
+3. 修改全名、位置、简介、技能等字段
+4. 保存，验证：资料页面显示更新后的内容
+
+### 3. 发布求助（免费志愿任务）
+
+1. 登录 `alice` 账号
+2. 点击仪表盘的 **发布求助**
+3. 填写表单：
+   - 标题：`帮忙遛狗`
+   - 描述：`下午3点需要人帮忙遛金毛，公园附近`
+   - 分类：`生活服务`
+   - 勾选 **志愿服务**（不填价格）
+4. 提交，验证：跳转到任务详情页，状态为 `Open`，显示「志愿服务」标签
+
+### 4. 发布求助（付费任务）
+
+1. 仍然用 `alice` 账号
+2. 再次 **发布求助**：
+   - 标题：`Python 作业辅导`
+   - 描述：`需要帮忙调试一个 Flask 项目`
+   - 分类：`编程`
+   - **不勾选** 志愿服务
+   - 价格填 `0.05`
+3. 提交，验证：任务详情页显示 `0.05` 价格标签
+
+### 5. 提交帮助申请
+
+1. **退出** alice，登录 `bob`
+2. 打开 http://127.0.0.1:5000/marketplace，找到 alice 刚发的 `Python 作业辅导`
+3. 点击进入任务详情
+4. 在右侧「提供你的帮助」区域填写留言，提交
+5. 验证：页面显示「您已提交过帮助申请，状态: Pending」
+
+### 6. 接受帮助申请（普通方式）
+
+1. **退出** bob，登录 `alice`
+2. 进入 `帮忙遛狗` 任务详情
+3. 在「收到的帮助申请」列表中，点击 **接受帮助申请**
+4. 验证：任务状态变为 `In_progress`
+
+### 7. 完成任务 + 互相评价
+
+1. 仍然在 `帮忙遛狗` 详情页（alice 视角）
+2. 点击 **标记任务已完成**
+3. 任务状态变为 `Completed`
+4. 在页面底部「提交评价」区域，给 bob 打分并写评语
+5. **退出** alice，登录 `bob`
+6. 进入同一任务，提交对 alice 的评价
+7. 验证：双方评价都显示在评价列表中
+
+### 8. 私信功能
+
+1. 登录 `alice`
+2. 点击导航栏 **私信**
+3. 或进入 bob 的个人主页 http://127.0.0.1:5000/u/bob，点击 **发送私信**
+4. 发送一条消息
+5. 切换到 `bob` 账号，查看私信列表，回复
+6. 验证：双方都能看到聊天记录
+
+### 9. 搜索与排行榜
+
+1. 点击导航栏 **搜索**，输入关键词搜索任务
+2. 点击导航栏 **排行榜**，查看信誉排名
+3. 验证：expert1/expert2/expert3 排名靠前
+
+### 10. 通知系统
+
+1. 登录 `alice`，点击导航栏 **通知**
+2. 验证：能看到之前的操作通知（如 bob 提交帮助申请、任务完成等）
+
+### 11. 举报功能
+
+1. 登录 `bob`，进入任意他人发布的任务
+2. 点击 **举报** 按钮
+3. 填写举报理由并提交
+4. 验证：提示举报已提交
+
+---
+
+## 第二部分：管理后台
+
+### 12. 管理员登录
+
+1. 登录管理员账号：`admin@dailyhelper.com / admin123`
+2. 自动跳转到管理后台 http://127.0.0.1:5000/admin
+
+### 13. 用户管理
+
+1. 点击 **用户管理**
+2. 查看所有用户列表
+3. 尝试 **拉黑** 某个用户（如 eve），再 **解除拉黑**
+
+### 14. 任务管理
+
+1. 点击 **任务管理**
+2. 查看所有任务列表
+3. 可以强制取消某个任务
+
+### 15. 内容审核
+
+1. 点击 **内容审核**
+2. 查看之前的举报记录
+3. 处理举报（忽略 / 处理）
+
+### 16. 数据导出
+
+1. 在管理后台点击 **导出用户数据** 或 **导出任务数据**
+2. 验证：下载 CSV 文件
+
+---
+
+## 第三部分：区块链审计链（内部链）
+
+### 17. 查看区块链浏览器
+
+1. 登录任意用户
+2. 访问 http://127.0.0.1:5000/blockchain/blocks
+3. 查看已封装的区块列表
+4. 点击某个区块查看其中的 statements
+5. 验证：能看到注册、登录、创建任务等操作的链上记录
+
+### 18. 信誉快照上链
+
+1. 登录 `expert1`
+2. 访问 http://127.0.0.1:5000/u/expert1
+3. 在「链上信誉证明」区域点击 **将当前信誉快照上链**
+4. 等待交易确认（需要 Sepolia ETH）
+5. 验证：页面显示交易哈希和上链时间
+6. 点击 **查看可验证快照(JSON)** 查看完整快照数据
+
+---
+
+## 第四部分：Web3 钱包绑定
+
+### 19. 连接 MetaMask
+
+1. 登录 `alice`（或用你自己的账号）
+2. 点击导航栏 **连接 MetaMask**
+3. MetaMask 弹出请求，选择账户并确认
+4. 签名验证消息
+5. 验证：按钮变为「已连接: 0xABC...1234」
+
+### 20. 查看钱包绑定状态
+
+1. 访问 http://127.0.0.1:5000/connect-wallet
+2. 验证：页面显示已绑定的钱包地址和链 ID
+
+---
+
+## 第五部分：SBT 灵魂绑定代币
+
+### 21. 管理员生成 Merkle Root
+
+1. 登录 `admin@dailyhelper.com / admin123`
+2. 进入 http://127.0.0.1:5000/admin/sbt
+3. 查看「合格用户列表」（信誉 ≥ 20 且已绑定钱包的用户）
+4. 点击 **生成 Merkle Root 并上链**
+5. 等待交易确认
+6. 验证：页面显示成功消息和 Tx Hash
+
+> **注意**：此操作消耗服务端签名者的 Sepolia ETH（config.py 中的 `ETH_SIGNER_PRIVATE_KEY`）
+
+### 22. 用户铸造 SBT
+
+1. 登录 `expert1`（信誉 85，已绑定钱包 `0x27492d60...`）
+2. 确保 MetaMask 当前账户是 `0x27492d60061B7A66154F828CCC7e68512f340188`
+3. 访问 http://127.0.0.1:5000/u/expert1
+4. 在「灵魂绑定代币 (SBT)」区域，点击 **申领 / 升级 SBT**
+5. MetaMask 弹窗确认交易
+6. 等待交易确认
+7. 验证：SBT 状态显示「🥇 金牌 (链上分: 85)」
+
+> **前提**：步骤 21 必须先完成（链上有 Merkle Root 才能验证 Proof）
+
+---
+
+## 第六部分：Escrow 赏金托管
+
+### 23. 发布付费任务 → 接受 → 锁定 Escrow
+
+1. 登录 `alice`
+2. **发布求助**：标题 `Escrow测试任务`，价格 `0.01`，不勾选志愿
+3. **退出**，登录 `bob`
+4. 找到该任务，提交帮助申请
+5. **退出**，登录 `alice`
+6. 进入任务详情，在帮助申请列表找到 bob 的申请
+7. 如果 bob 已绑定钱包，会看到 **「接受并锁定赏金」** 按钮
+8. 点击按钮 → MetaMask 弹窗确认 → 支付 0.01 ETH
+9. 等待交易确认
+10. 验证：
+    - 任务状态变为 `In_progress`
+    - 链上托管状态显示「⛓️ 已锁定 | 0.01 ETH」
+
+### 24. 释放赏金（正常完成）
+
+1. 仍在 alice 的任务详情页
+2. 任务管理区域现在显示 **「确认完成并释放赏金」** 和 **「发起仲裁」**
+3. 点击 **确认完成并释放赏金**
+4. MetaMask 确认交易
+5. 验证：
+    - 任务状态变为 `Completed`
+    - 链上托管状态显示「✅ Escrow 已结算」
+    - bob 的 Sepolia 钱包收到 0.01 ETH
+
+---
+
+## 第七部分：DAO 仲裁
+
+### 25. 创建争议任务
+
+1. 登录 `alice`，发布新付费任务，价格 `0.01`
+2. 登录 `bob`，提交帮助申请
+3. 登录 `alice`，接受并锁定赏金（同步骤 23）
+4. 锁定成功后，页面刷新，点击 **「发起仲裁」**
+5. MetaMask 确认交易
+6. 验证：任务状态变为 `Disputed`，显示「⚖️ 仲裁中」
+
+### 26. 专家投票
+
+1. 登录 `expert1`（信誉 85，有 SBT 金牌）
+2. 导航栏出现 **仲裁大厅** 入口，点击进入
+3. 看到争议任务列表
+4. 点击 **「支持打款」**（资金释放给帮助者）或 **「支持退款」**（退给求助者）
+5. MetaMask 确认交易
+6. 验证：
+    - DAO_VOTE_THRESHOLD 默认为 1，一票即可裁决
+    - 投票完成后任务自动结算
+    - 链上状态变为「已裁决」
+
+> **重要**：投票者的 MetaMask 地址 **不能** 是任务的求助者或帮助者，否则合约会拒绝。
+
+---
+
+## 第八部分：补充功能
+
+### 27. 智能助手（AI 聊天）
+
+1. 点击导航栏 **智能助手**
+2. 输入问题，如「如何发布求助？」
+3. 验证：收到 AI 回复
+
+### 28. 附近的人
+
+1. 登录任意有位置信息的用户
+2. 点击 **附近的人**
+3. 验证：显示按距离排序的用户列表
+
+### 29. 志愿服务专区
+
+1. 访问 http://127.0.0.1:5000/volunteer
+2. 验证：页面跳转或整合到市场页，并通过志愿筛选查看志愿服务任务
+
+---
+
+## 快速验证清单
+
+完成以上步骤后，确认以下功能全部正常：
+
+| # | 功能 | 验证点 |
+|---|------|--------|
+| ✅ | 注册 / 登录 / 退出 | 正常跳转 |
+| ✅ | 发布免费任务 | 显示志愿标签 |
+| ✅ | 发布付费任务 | 显示 ETH 价格 |
+| ✅ | 提交帮助申请 | 状态 Pending |
+| ✅ | 接受帮助申请 | 状态 In_progress |
+| ✅ | 完成任务 | 状态 Completed |
+| ✅ | 互相评价 | 评分显示 |
+| ✅ | 私信聊天 | 双向消息 |
+| ✅ | 搜索 / 排行榜 | 结果正确 |
+| ✅ | 通知系统 | 有通知记录 |
+| ✅ | 管理后台 | 用户 / 任务 / 审核 |
+| ✅ | 区块链审计 | 区块列表 + statements |
+| ✅ | MetaMask 绑定 | 签名验证成功 |
+| ✅ | SBT 铸造 | 链上等级显示 |
+| ✅ | Escrow 锁定 | 链上状态：已锁定 |
+| ✅ | Escrow 释放 | 帮助者收款 |
+| ✅ | DAO 仲裁投票 | 自动裁决 + 结算 |
+
+---
+
+## 合约地址（Sepolia 测试网）
+
+| 合约 | 地址 |
+|------|------|
+| ReputationSBT | `0xC80713Ae1aB233BB29b9991a80BA7594f5C128F3` |
+| TaskEscrow | `0x90413AfD18C53172d09caD650FB5Fd80b7154002` |
+
+Etherscan 查看：
+- SBT: https://sepolia.etherscan.io/address/0xC80713Ae1aB233BB29b9991a80BA7594f5C128F3
+- Escrow: https://sepolia.etherscan.io/address/0x90413AfD18C53172d09caD650FB5Fd80b7154002
+
+---
 
 ## 许可证
 
 本项目采用仓库中的 `LICENSE` 文件约定。
+

@@ -96,7 +96,7 @@ def admin_unblacklist_user(user_id: int):
 def admin_delete_user(user_id: int):
     from models import (
         User, HelpRequest, HelpOffer, Review, Payment,
-        Message, Notification, Flag, WalletLink, Statement,
+        Message, Notification, Flag, WalletLink, Statement, Appeal, ChatbotMessage,
     )
     u = User.query.get_or_404(user_id)
     if u.user_type == "admin":
@@ -108,6 +108,8 @@ def admin_delete_user(user_id: int):
     Payment.query.filter((Payment.helper_id == user_id) | (Payment.requester_id == user_id)).delete(synchronize_session=False)
     Message.query.filter((Message.sender_id == user_id) | (Message.receiver_id == user_id)).delete(synchronize_session=False)
     Notification.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+    Appeal.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+    ChatbotMessage.query.filter_by(user_id=user_id).delete(synchronize_session=False)
     Flag.query.filter_by(reporter_id=user_id).delete(synchronize_session=False)
     WalletLink.query.filter_by(user_id=user_id).delete(synchronize_session=False)
     Statement.query.filter_by(user_id=user_id).update({"user_id": None}, synchronize_session=False)
@@ -153,8 +155,11 @@ def admin_flag_action(flag_id: int, action: str):
         if fl.content_type == "request":
             req = HelpRequest.query.get(fl.content_id)
             if req and req.status in ("open", "in_progress"):
-                req.status = "cancelled"
-                flash(f"举报已通过，求助 #{fl.content_id} 已被关闭。", "success")
+                if req.status == "in_progress" and req.price and not req.is_volunteer:
+                    flash(f"举报已通过，但求助 #{fl.content_id} 是进行中的付费 Escrow 任务，不能直接关闭。请先走链上释放或仲裁流程。", "error")
+                else:
+                    req.status = "cancelled"
+                    flash(f"举报已通过，求助 #{fl.content_id} 已被关闭。", "success")
             else:
                 flash("举报已通过。（被举报的求助已不在活跃状态）", "success")
         elif fl.content_type == "user":
@@ -212,6 +217,9 @@ def admin_cancel_request(request_id: int):
     req = HelpRequest.query.get_or_404(request_id)
     if req.status in ("completed", "cancelled"):
         flash("该求助已完成或已取消，无法操作。", "info")
+        return redirect(url_for("admin.admin_requests"))
+    if req.status in ("in_progress", "disputed") and req.price and not req.is_volunteer:
+        flash("付费 Escrow 任务已有链上资金状态，不能在后台直接关闭。请通过详情页释放赏金或仲裁裁决。", "error")
         return redirect(url_for("admin.admin_requests"))
     old_status = req.status
     req.status = "cancelled"
@@ -295,6 +303,58 @@ def admin_broadcast():
         flash(f"公告已发送给 {count} 位用户。", "success")
         return redirect(url_for("admin.admin_index"))
     return render_template("admin/broadcast.html")
+
+
+@admin_bp.route("/appeals")
+@login_required
+@admin_required
+def admin_appeals():
+    from models import Appeal
+    status_filter = request.args.get("status", "").strip()
+    query = Appeal.query
+    if status_filter:
+        query = query.filter(Appeal.status == status_filter)
+    appeals = query.order_by(Appeal.created_at.desc()).limit(50).all()
+    return render_template("admin/appeals.html", appeals=appeals, status_filter=status_filter)
+
+
+@admin_bp.post("/appeals/<int:appeal_id>/<string:action>")
+@login_required
+@admin_required
+def admin_appeal_action(appeal_id: int, action: str):
+    from datetime import datetime, timezone
+    from models import Appeal, User
+    if action not in ("approve", "reject"):
+        abort(400)
+    ap = Appeal.query.get_or_404(appeal_id)
+    if ap.status != "pending":
+        flash("该申诉已被处理。", "info")
+        return redirect(url_for("admin.admin_appeals"))
+
+    admin_reply = (request.form.get("admin_reply") or "").strip()
+    ap.admin_reply = admin_reply or None
+    ap.resolved_at = datetime.now(timezone.utc)
+
+    if action == "approve":
+        ap.status = "approved"
+        user = User.query.get(ap.user_id)
+        if user:
+            user.is_blacklisted = False
+            user.blacklist_reason = None
+            notify(user.id, "appeal_approved", "您的申诉已通过，账号已恢复正常。", url_for("main.appeal"))
+        flash(f"申诉已通过，用户 {user.username if user else ap.user_id} 已解除拉黑。", "success")
+    else:
+        ap.status = "rejected"
+        notify(ap.user_id, "appeal_rejected", f"您的申诉已被驳回。{('理由：' + admin_reply) if admin_reply else ''}", url_for("main.appeal"))
+        flash("申诉已驳回。", "success")
+
+    db.session.commit()
+    try:
+        append_statement(kind=f"appeal_{action}", payload={"appeal_id": ap.id, "user_id": ap.user_id, "admin_id": current_user.id}, user_id=current_user.id)
+        maybe_seal_block()
+    except Exception:
+        pass
+    return redirect(url_for("admin.admin_appeals"))
 
 
 @admin_bp.route("/sbt", methods=["GET", "POST"])

@@ -3,7 +3,7 @@
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from flask import Blueprint, render_template, redirect, url_for, flash, request
+from flask import Blueprint, render_template, redirect, url_for, flash, request, session
 from flask_login import login_required, login_user, logout_user, current_user
 
 from extensions import db
@@ -79,7 +79,10 @@ def login():
                 maybe_seal_block()
             except Exception:  # noqa: BLE001
                 pass
-            flash("登录成功。", "success")
+            if user.is_blacklisted:
+                flash("⚠️ 您的账号已被管理员列入黑名单，部分功能受限。<a href='/appeal' style='color:var(--accent);text-decoration:underline;'>点此申诉</a>", "warning")
+            else:
+                flash("登录成功。", "success")
             return redirect(url_for("main.post_login_redirect"))
         flash("邮箱或密码错误。", "error")
     if request.method == "POST" and form.errors:
@@ -94,6 +97,7 @@ def login():
 def logout():
     uid = getattr(current_user, "id", None)
     logout_user()
+    session.clear()
     try:
         append_statement(kind="logout", payload={}, user_id=uid)
         maybe_seal_block()
@@ -134,7 +138,8 @@ def reset_password(token: str):
     if prt is None:
         flash("重置链接无效或已过期。", "error")
         return redirect(url_for("auth.forgot_password"))
-    if (datetime.now(timezone.utc) - prt.created_at).total_seconds() > 3600:
+    created = prt.created_at if prt.created_at.tzinfo else prt.created_at.replace(tzinfo=timezone.utc)
+    if (datetime.now(timezone.utc) - created).total_seconds() > 3600:
         flash("重置链接已过期，请重新申请。", "error")
         return redirect(url_for("auth.forgot_password"))
 

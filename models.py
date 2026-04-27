@@ -217,6 +217,21 @@ class Notification(db.Model):
     user = db.relationship("User", backref="notifications")
 
 
+class ChatbotMessage(db.Model):
+    __tablename__ = "chatbot_messages"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    role = db.Column(db.String(20), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), index=True)
+
+    user = db.relationship("User", backref="chatbot_messages")
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<ChatbotMessage {self.id} user={self.user_id} role={self.role}>"
+
+
 
 class Payment(db.Model):
     __tablename__ = "payments"
@@ -228,7 +243,7 @@ class Payment(db.Model):
     helper_address = db.Column(db.String(42), nullable=False)
     amount = db.Column(db.Float, nullable=False)
     tx_hash = db.Column(db.String(66), nullable=True)
-    status = db.Column(db.String(20), nullable=False, default="address_submitted")  # address_submitted / paid
+    status = db.Column(db.String(20), nullable=False, default="address_submitted")  # address_submitted / paid / refunded
     address_submitted_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     paid_at = db.Column(db.DateTime, nullable=True)
 
@@ -238,6 +253,23 @@ class Payment(db.Model):
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<Payment req={self.request_id} status={self.status}>"
+
+
+class Appeal(db.Model):
+    __tablename__ = "appeals"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    reason = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(20), nullable=False, default="pending")  # pending/approved/rejected
+    admin_reply = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    resolved_at = db.Column(db.DateTime, nullable=True)
+
+    user = db.relationship("User", backref="appeals")
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<Appeal {self.id} user={self.user_id} status={self.status}>"
 
 
 class Message(db.Model):

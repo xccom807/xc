@@ -1,0 +1,63 @@
+{% if q %}
+  {% if search_type in ('all', 'requests') and results_requests %}
+    <div class="section fade-in">
+      <h3>求助结果（{{ pagination_requests.total if pagination_requests else results_requests|length }}）</h3>
+      <div class="grid grid-3" style="gap:1rem;margin-top:1rem;">
+        {% for r in results_requests %}
+          <div class="card" style="padding:1rem;">
+            <h4><a href="{{ url_for('request_detail', request_id=r.id) }}">{{ r.title }}</a></h4>
+            <p class="muted" style="font-size:.85rem;">{{ r.description[:100] }}{% if r.description|length > 100 %}...{% endif %}</p>
+            <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.5rem;">
+              {% if r.category %}<span class="tag">{{ r.category }}</span>{% endif %}
+              {% if r.location %}<span class="tag"><i class="fa-solid fa-location-dot"></i> {{ r.location }}</span>{% endif %}
+              <span class="badge {{ r.status }}">{{ r.status }}</span>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+      {% if pagination_requests and pagination_requests.pages > 1 %}
+        <div class="pagination" style="margin-top:1rem;display:flex;justify-content:center;gap:.5rem;">
+          {% if pagination_requests.has_prev %}
+            <a href="{{ url_for('search_page', q=q, type=search_type, page=pagination_requests.prev_num) }}"
+               hx-get="{{ url_for('search_page', q=q, type=search_type, page=pagination_requests.prev_num) }}"
+               hx-target="#search-results" hx-swap="innerHTML"
+               class="btn btn-small secondary">← 上一页</a>
+          {% endif %}
+          <span class="muted">第 {{ pagination_requests.page }} / {{ pagination_requests.pages }} 页</span>
+          {% if pagination_requests.has_next %}
+            <a href="{{ url_for('search_page', q=q, type=search_type, page=pagination_requests.next_num) }}"
+               hx-get="{{ url_for('search_page', q=q, type=search_type, page=pagination_requests.next_num) }}"
+               hx-target="#search-results" hx-swap="innerHTML"
+               class="btn btn-small secondary">下一页 →</a>
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  {% if search_type in ('all', 'users') and results_users %}
+    <div class="section fade-in" style="margin-top:2rem;">
+      <h3>用户结果（{{ pagination_users.total if pagination_users else results_users|length }}）</h3>
+      <div class="grid grid-3" style="gap:1rem;margin-top:1rem;">
+        {% for u in results_users %}
+          <div class="card" style="padding:1rem;text-align:center;">
+            <div class="avatar" style="width:48px;height:48px;border-radius:50%;background:var(--accent-color);display:inline-flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:1.2rem;margin-bottom:.5rem;">
+              {{ (u.full_name or u.username)[0]|upper }}
+            </div>
+            <h4><a href="{{ url_for('profile_view', username=u.username) }}">{{ u.full_name or u.username }}</a></h4>
+            <p class="muted" style="font-size:.85rem;">@{{ u.username }}</p>
+            {% if u.location %}<p class="muted" style="font-size:.8rem;"><i class="fa-solid fa-location-dot"></i> {{ u.location }}</p>{% endif %}
+            {% if u.skills %}<p class="muted" style="font-size:.8rem;">{{ u.skills[:50] }}</p>{% endif %}
+            <div class="reputation-badge" style="margin-top:.5rem;">信誉: {{ '%.1f'|format(u.reputation_score or 0) }}</div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+
+  {% if not results_requests and not results_users %}
+    <p class="muted fade-in" style="text-align:center;padding:3rem;">未找到与「{{ q }}」相关的结果。</p>
+  {% endif %}
+{% else %}
+  <p class="muted" style="text-align:center;padding:3rem;">输入关键词开始搜索。</p>
+{% endif %}

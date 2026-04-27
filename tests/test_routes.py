@@ -67,6 +67,9 @@ class TestPublicPages:
     def test_login_page(self, client):
         r = client.get("/login")
         assert r.status_code == 200
+        assert "no-store" in r.headers.get("Cache-Control", "")
+        assert r.headers.get("Pragma") == "no-cache"
+        assert r.headers.get("Expires") == "0"
 
     def test_signup_page(self, client):
         r = client.get("/signup")
@@ -118,6 +121,16 @@ class TestAuth:
         _login(client, "alice@test.com", "test123")
         r = _logout(client)
         assert r.status_code == 200
+
+    def test_logout_clears_session(self, client):
+        _login(client, "alice@test.com", "test123")
+        with client.session_transaction() as sess:
+            sess["temporary_switch_state"] = "stale"
+        r = client.get("/logout", follow_redirects=False)
+        assert r.status_code == 302
+        with client.session_transaction() as sess:
+            assert "_user_id" not in sess
+            assert "temporary_switch_state" not in sess
 
     def test_protected_redirect(self, client):
         r = client.get("/dashboard")
@@ -468,6 +481,65 @@ class TestAPI:
                         json={"message": ""},
                         content_type="application/json")
         assert r.status_code == 400
+        data = r.get_json()
+        assert data.get("ok") is False
+
+    def test_chatbot_page_loads_history(self, client, app):
+        from models import User, ChatbotMessage
+
+        with app.app_context():
+            user = User.query.filter_by(email="alice@test.com").first()
+            ChatbotMessage.query.filter(
+                ChatbotMessage.user_id == user.id,
+                ChatbotMessage.content.in_(["测试历史问题", "测试历史回答"]),
+            ).delete(synchronize_session=False)
+            db.session.add(ChatbotMessage(user_id=user.id, role="user", content="测试历史问题"))
+            db.session.add(ChatbotMessage(user_id=user.id, role="assistant", content="测试历史回答"))
+            db.session.commit()
+
+        _login(client, "alice@test.com", "test123")
+        r = client.get("/chatbot")
+        assert r.status_code == 200
+        body = r.get_data(as_text=True)
+        assert "\\u6d4b\\u8bd5\\u5386\\u53f2\\u95ee\\u9898" in body
+        assert "\\u6d4b\\u8bd5\\u5386\\u53f2\\u56de\\u7b54" in body
+
+    def test_chatbot_api_persists_history(self, client, app, monkeypatch):
+        from models import User, ChatbotMessage
+
+        class FakeResponse:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {"choices": [{"message": {"role": "assistant", "content": "持久化测试回答"}}]}
+
+        def fake_post(*args, **kwargs):
+            return FakeResponse()
+
+        app.config["KIMI_API_KEY"] = "test-key"
+        monkeypatch.setattr("routes.api.http_requests.post", fake_post)
+
+        with app.app_context():
+            user = User.query.filter_by(email="alice@test.com").first()
+            ChatbotMessage.query.filter(
+                ChatbotMessage.user_id == user.id,
+                ChatbotMessage.content.in_(["持久化测试问题", "持久化测试回答"]),
+            ).delete(synchronize_session=False)
+            db.session.commit()
+
+        _login(client, "alice@test.com", "test123")
+        r = client.post("/api/chatbot", json={"message": "持久化测试问题"}, content_type="application/json")
+        assert r.status_code == 200
+        assert r.get_json().get("reply") == "持久化测试回答"
+
+        with app.app_context():
+            user = User.query.filter_by(email="alice@test.com").first()
+            saved = ChatbotMessage.query.filter(
+                ChatbotMessage.user_id == user.id,
+                ChatbotMessage.content.in_(["持久化测试问题", "持久化测试回答"]),
+            ).count()
+            assert saved == 2
 
     def test_arbitration_hall_low_rep(self, client):
         _login(client, "alice@test.com", "test123")

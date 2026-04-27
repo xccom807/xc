@@ -1,0 +1,54 @@
+{% if items %}
+  <div class="grid-cards fade-in">
+    {% for r in items %}
+      <div class="mp-card">
+        <div class="mp-card__head">
+          <div class="avatar"></div>
+          <div>
+            <strong>{{ r.user.username if r.user else 'User' }}</strong>
+            <div class="muted" style="font-size:.85rem;">{{ r.location or '远程/任意地点' }}</div>
+          </div>
+          <span class="badge {{ r.status }}" style="margin-left:auto;">{{ r.status|capitalize }}</span>
+        </div>
+        <h3>{{ r.title }}</h3>
+        <p class="muted">{{ r.description[:160] }}{% if r.description|length > 160 %}...{% endif %}</p>
+        <div class="mp-card__meta">
+          <span class="tag"><i class="fa-regular fa-folder"></i> {{ r.category or '未分类' }}</span>
+          {% if r.time_needed %}<span class="tag"><i class="fa-regular fa-clock"></i> {{ r.time_needed }}</span>{% endif %}
+          {% if r.is_volunteer %}
+            <span class="tag volunteer"><i class="fa-solid fa-hand-holding-heart"></i> 志愿服务</span>
+          {% elif r.price is not none %}
+            <span class="tag price"><i class="fa-solid fa-coins"></i> {{ '%.2f'|format(r.price) }}</span>
+          {% endif %}
+        </div>
+        <div class="actions">
+          <a class="btn" href="{{ url_for('request_detail', request_id=r.id) }}"><i class="fa-solid fa-handshake-angle"></i> 提供帮助</a>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+
+  <div class="pagination fade-in">
+    {% if pagination.has_prev %}
+      <a class="btn secondary"
+         href="{{ url_for('marketplace', page=pagination.prev_num, **filters) }}"
+         hx-get="{{ url_for('marketplace', page=pagination.prev_num, **filters) }}"
+         hx-target="#marketplace-results" hx-swap="innerHTML">上一页</a>
+    {% else %}
+      <span class="btn secondary" style="opacity:.6; pointer-events:none;">上一页</span>
+    {% endif %}
+    <span class="muted">第 {{ pagination.page }} 页，共 {{ pagination.pages }} 页</span>
+    {% if pagination.has_next %}
+      <a class="btn secondary"
+         href="{{ url_for('marketplace', page=pagination.next_num, **filters) }}"
+         hx-get="{{ url_for('marketplace', page=pagination.next_num, **filters) }}"
+         hx-target="#marketplace-results" hx-swap="innerHTML">下一页</a>
+    {% else %}
+      <span class="btn secondary" style="opacity:.6; pointer-events:none;">下一页</span>
+    {% endif %}
+  </div>
+{% else %}
+  <div class="card fade-in" style="margin-top:1rem;">
+    <p class="muted">没有找到符合条件的求助。尝试放宽筛选条件。</p>
+  </div>
+{% endif %}

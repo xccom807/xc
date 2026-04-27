@@ -1,8 +1,10 @@
 """API routes: wallet, payment, SBT, escrow sync, contracts config, chatbot."""
 
 import secrets
+from decimal import Decimal, InvalidOperation
 from datetime import datetime, timedelta, timezone
 
+import requests as http_requests
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, current_app
 from flask_login import login_required, current_user
 from eth_account import Account
@@ -15,6 +17,32 @@ from web3_service import get_web3, get_signer_address, submit_anchor_transaction
 from routes.helpers import notify
 
 api_bp = Blueprint("api", __name__)
+
+
+def _has_active_paid_escrow_task(user_id: int) -> bool:
+    from models import HelpOffer, HelpRequest
+
+    active_as_requester = HelpRequest.query.filter(
+        HelpRequest.user_id == user_id,
+        HelpRequest.status.in_(("in_progress", "disputed")),
+        HelpRequest.is_volunteer.is_(False),
+        HelpRequest.price.isnot(None),
+    ).first()
+    if active_as_requester:
+        return True
+    active_as_helper = (
+        HelpOffer.query
+        .join(HelpRequest, HelpOffer.request_id == HelpRequest.id)
+        .filter(
+            HelpOffer.helper_id == user_id,
+            HelpOffer.status == "accepted",
+            HelpRequest.status.in_(("in_progress", "disputed")),
+            HelpRequest.is_volunteer.is_(False),
+            HelpRequest.price.isnot(None),
+        )
+        .first()
+    )
+    return bool(active_as_helper)
 
 
 # ── Wallet ──────────────────────────────────────────
@@ -68,6 +96,9 @@ def wallet_challenge():
     )
 
     wallet_link = WalletLink.query.filter_by(user_id=current_user.id).one_or_none()
+    if wallet_link and wallet_link.verified_at and wallet_link.address.lower() != address.lower():
+        if _has_active_paid_escrow_task(current_user.id):
+            return jsonify({"ok": False, "error": "存在进行中或仲裁中的付费 Escrow 任务，暂不能改绑钱包。"}), 409
     if wallet_link is None:
         wallet_link = WalletLink(user_id=current_user.id, address=address, challenge_nonce=nonce, challenge_issued_at=issued_at)
         db.session.add(wallet_link)
@@ -156,6 +187,8 @@ def wallet_disconnect():
     wallet_link = WalletLink.query.filter_by(user_id=current_user.id).one_or_none()
     if wallet_link is None:
         return jsonify({"ok": True, "address": None})
+    if _has_active_paid_escrow_task(current_user.id):
+        return jsonify({"ok": False, "error": "存在进行中或仲裁中的付费 Escrow 任务，暂不能解绑钱包。"}), 409
     removed_address = wallet_link.address
     db.session.delete(wallet_link)
     db.session.commit()
@@ -235,10 +268,13 @@ def web3_balance():
     if w3 and addr:
         try:
             balance_wei = w3.eth.get_balance(addr)
-            balance_eth = w3.from_wei(balance_wei, "ether")
+            balance_eth = str(w3.from_wei(balance_wei, "ether"))
         except Exception as e:
             error = str(e)
-    return jsonify({"address": addr, "balance_eth": str(balance_eth) if balance_eth is not None else None, "error": error})
+    accept = request.headers.get("Accept", "")
+    if "text/html" not in accept:
+        return jsonify({"address": addr, "balance_eth": balance_eth, "error": error})
+    return render_template("web3/balance.html", address=addr, balance_eth=balance_eth, error=error)
 
 
 # ── Payment ──────────────────────────────────────────
@@ -247,6 +283,9 @@ def web3_balance():
 @login_required
 def submit_payment_address():
     from models import HelpRequest, HelpOffer, Payment
+    if getattr(current_user, "is_blacklisted", False):
+        flash("您的账号已被列入黑名单，无法操作。", "error")
+        return redirect(url_for("main.dashboard"))
     request_id = request.form.get("request_id", type=int)
     helper_address = (request.form.get("helper_address") or "").strip()
     if not request_id or not helper_address:
@@ -259,6 +298,9 @@ def submit_payment_address():
     req_obj = HelpRequest.query.get_or_404(request_id)
     if req_obj.status != "completed":
         flash("任务尚未完成，无法提交收款地址。", "error")
+        return redirect(url_for("features.request_detail", request_id=request_id))
+    if not req_obj.price or req_obj.is_volunteer:
+        flash("该任务为免费/志愿服务，无需支付。", "error")
         return redirect(url_for("features.request_detail", request_id=request_id))
     completed_offer = HelpOffer.query.filter_by(request_id=req_obj.id, status="completed").first()
     if not completed_offer or completed_offer.helper_id != current_user.id:
@@ -308,6 +350,9 @@ def record_payment():
     if payment.status == "paid":
         flash("该任务已完成支付，无需重复操作。", "error")
         return redirect(url_for("features.request_detail", request_id=request_id))
+    if payment.status == "refunded":
+        flash("该任务已由仲裁退款给求助者，不能再上传支付凭证。", "error")
+        return redirect(url_for("features.request_detail", request_id=request_id))
     payment.tx_hash = tx_hash
     payment.status = "paid"
     payment.paid_at = datetime.now(timezone.utc)
@@ -351,29 +396,173 @@ def api_sbt_status(address: str):
 @csrf.exempt
 @login_required
 def api_escrow_sync():
-    from models import HelpRequest, HelpOffer
+    from models import HelpRequest, HelpOffer, WalletLink
     data = request.get_json(silent=True) or {}
     task_id = data.get("task_id")
     action = data.get("action")
     tx_hash = data.get("tx_hash", "")
+    outcome = (data.get("outcome") or "").strip()
+    chain_helper_address = None
+    chain_requester_address = None
+    recipient_address = (data.get("recipient_address") or "").strip()
+    if recipient_address and Web3.is_address(recipient_address):
+        recipient_address = Web3.to_checksum_address(recipient_address)
+    else:
+        recipient_address = None
     if not task_id or not action:
         return jsonify({"error": "task_id and action required"}), 400
     req = HelpRequest.query.get(task_id)
     if not req:
         return jsonify({"error": "task not found"}), 404
+    if getattr(current_user, "is_blacklisted", False) and action in ("lock", "dispute"):
+        return jsonify({"error": "blacklisted users cannot start escrow or dispute actions"}), 403
+    if action in ("lock", "release", "dispute", "resolve") and (req.is_volunteer or not req.price):
+        return jsonify({"error": "escrow sync is only valid for paid tasks"}), 400
+    if action in ("lock", "release") and current_user.id != req.user_id:
+        return jsonify({"error": "only requester can sync this action"}), 403
+    if action == "dispute":
+        party_offer = HelpOffer.query.filter_by(request_id=req.id, helper_id=current_user.id).filter(HelpOffer.status.in_(("accepted", "completed"))).first()
+        if current_user.id != req.user_id and not party_offer:
+            return jsonify({"error": "only task parties can sync dispute"}), 403
+    if action in ("lock", "release", "dispute", "resolve"):
+        escrow_addr = current_app.config.get("ESCROW_CONTRACT_ADDRESS")
+        w3 = get_web3()
+        if not escrow_addr or w3 is None or not w3.is_connected():
+            return jsonify({"error": "cannot verify escrow state on-chain"}), 503
+        try:
+            escrow_abi = [{
+                "inputs": [{"internalType": "uint256", "name": "taskId", "type": "uint256"}],
+                "name": "getEscrow",
+                "outputs": [
+                    {"internalType": "address", "name": "requester", "type": "address"},
+                    {"internalType": "address", "name": "helper", "type": "address"},
+                    {"internalType": "uint256", "name": "amount", "type": "uint256"},
+                    {"internalType": "enum TaskEscrow.EscrowStatus", "name": "status", "type": "uint8"},
+                    {"internalType": "uint64", "name": "createdAt", "type": "uint64"},
+                    {"internalType": "uint64", "name": "resolvedAt", "type": "uint64"},
+                    {"internalType": "uint32", "name": "votesForHelper", "type": "uint32"},
+                    {"internalType": "uint32", "name": "votesForRequester", "type": "uint32"},
+                ],
+                "stateMutability": "view",
+                "type": "function",
+            }]
+            c = w3.eth.contract(address=Web3.to_checksum_address(escrow_addr), abi=escrow_abi)
+            chain_data = c.functions.getEscrow(int(task_id)).call()
+            chain_amount_wei = int(chain_data[2])
+            chain_status = int(chain_data[3])
+            chain_requester_address = Web3.to_checksum_address(chain_data[0])
+            chain_helper_address = Web3.to_checksum_address(chain_data[1])
+            requester_wallet = WalletLink.query.filter_by(user_id=req.user_id).first()
+            if not requester_wallet or not requester_wallet.verified_at:
+                return jsonify({"error": "requester has no verified wallet for escrow verification"}), 409
+            if requester_wallet.address.lower() != chain_requester_address.lower():
+                return jsonify({"error": "escrow requester address does not match task requester wallet"}), 409
+            try:
+                expected_amount_wei = int(Web3.to_wei(Decimal(str(req.price)), "ether"))
+            except (InvalidOperation, ValueError) as e:
+                return jsonify({"error": f"invalid task price for escrow verification: {e}"}), 409
+            if chain_amount_wei != expected_amount_wei:
+                return jsonify({"error": "escrow amount does not match task price"}), 409
+            expected_status = {"lock": 1, "release": 2, "dispute": 3, "resolve": 4}[action]
+            if chain_status != expected_status:
+                return jsonify({"error": f"escrow on-chain status mismatch: expected {expected_status}, got {chain_status}"}), 409
+            votes_for_helper = int(chain_data[6])
+            votes_for_requester = int(chain_data[7])
+            if action == "release":
+                outcome = "helper"
+                recipient_address = chain_helper_address
+            elif action == "resolve":
+                if votes_for_helper > votes_for_requester:
+                    outcome = "helper"
+                    recipient_address = chain_helper_address
+                else:
+                    outcome = "requester"
+                    recipient_address = chain_requester_address
+        except Exception as e:
+            return jsonify({"error": f"failed to verify escrow state: {e}"}), 503
     status_map = {"lock": "in_progress", "release": "completed", "dispute": "disputed", "resolve": "completed"}
+    if action == "resolve" and outcome in ("requester", "refund", "refund_requester"):
+        status_map["resolve"] = "cancelled"
     new_status = status_map.get(action)
     if not new_status:
         return jsonify({"error": f"unknown action: {action}"}), 400
     old_status = req.status
     req.status = new_status
     if action == "lock":
-        accepted_offer = HelpOffer.query.filter_by(request_id=req.id, status="accepted").first()
+        accepted_offer = None
+        if chain_helper_address:
+            chain_wallet = WalletLink.query.filter(WalletLink.address.ilike(chain_helper_address)).first()
+            if chain_wallet:
+                accepted_offer = HelpOffer.query.filter_by(request_id=req.id, helper_id=chain_wallet.user_id).filter(HelpOffer.status.in_(("pending", "accepted"))).first()
+        if not accepted_offer:
+            accepted_offer = HelpOffer.query.filter_by(request_id=req.id, status="accepted").first()
         if accepted_offer:
             notify(accepted_offer.helper_id, "escrow_locked", f"求助「{req.title[:30]}」的赏金已锁定到智能合约。", url_for("features.request_detail", request_id=req.id))
+            HelpOffer.query.filter_by(request_id=req.id, status="pending").filter(HelpOffer.id != accepted_offer.id).update({"status": "rejected"})
+            accepted_offer.status = "accepted"
+        else:
+            return jsonify({"error": "no matching offer for on-chain helper"}), 409
+    if action in ("release", "resolve"):
+        from models import Payment, WalletLink
+        existing_pay = Payment.query.filter_by(request_id=req.id).first()
+        offer = None
+        if chain_helper_address:
+            chain_wallet = WalletLink.query.filter(WalletLink.address.ilike(chain_helper_address)).first()
+            if chain_wallet:
+                offer = HelpOffer.query.filter_by(request_id=req.id, helper_id=chain_wallet.user_id).first()
+        if not offer:
+            offer = HelpOffer.query.filter_by(request_id=req.id, status="accepted").first()
+        if not offer:
+            offer = HelpOffer.query.filter_by(request_id=req.id, status="completed").first()
+        if not offer and existing_pay:
+            offer = HelpOffer.query.filter_by(request_id=req.id, helper_id=existing_pay.helper_id).first()
+        if not offer:
+            offer = HelpOffer.query.filter_by(request_id=req.id, status="pending").first()
+        if offer:
+            helper_wins = action == "release" or outcome in ("helper", "pay_helper")
+            requester_wins = action == "resolve" and outcome in ("requester", "refund", "refund_requester")
+            helper_wallet = WalletLink.query.filter_by(user_id=offer.helper_id).first()
+            requester_wallet = WalletLink.query.filter_by(user_id=req.user_id).first()
+            helper_addr = recipient_address if helper_wins and recipient_address else (helper_wallet.address if helper_wallet else "0x0000000000000000000000000000000000000000")
+            refund_addr = recipient_address if requester_wins and recipient_address else (requester_wallet.address if requester_wallet else "0x0000000000000000000000000000000000000000")
+            offer.status = "completed" if helper_wins else "rejected"
+            if requester_wins and existing_pay:
+                existing_pay.status = "refunded"
+                existing_pay.tx_hash = tx_hash or existing_pay.tx_hash
+                existing_pay.helper_address = refund_addr
+                existing_pay.paid_at = datetime.now(timezone.utc)
+            elif requester_wins and req.price:
+                pay = Payment(
+                    request_id=req.id,
+                    helper_id=offer.helper_id,
+                    requester_id=req.user_id,
+                    helper_address=refund_addr,
+                    amount=req.price,
+                    tx_hash=tx_hash or None,
+                    status="refunded",
+                    paid_at=datetime.now(timezone.utc),
+                )
+                db.session.add(pay)
+            elif helper_wins and existing_pay:
+                existing_pay.status = "paid"
+                existing_pay.tx_hash = tx_hash or existing_pay.tx_hash
+                existing_pay.helper_address = helper_addr
+                existing_pay.paid_at = existing_pay.paid_at or datetime.now(timezone.utc)
+            elif helper_wins and req.price:
+                pay = Payment(
+                    request_id=req.id,
+                    helper_id=offer.helper_id,
+                    requester_id=req.user_id,
+                    helper_address=helper_addr,
+                    amount=req.price,
+                    tx_hash=tx_hash or None,
+                    status="paid",
+                    paid_at=datetime.now(timezone.utc),
+                )
+                db.session.add(pay)
     db.session.commit()
     try:
-        append_statement(kind=f"escrow_{action}", payload={"task_id": task_id, "action": action, "tx_hash": tx_hash, "old_status": old_status, "new_status": new_status, "user_id": current_user.id}, user_id=current_user.id)
+        append_statement(kind=f"escrow_{action}", payload={"task_id": task_id, "action": action, "outcome": outcome, "recipient_address": recipient_address, "tx_hash": tx_hash, "old_status": old_status, "new_status": new_status, "user_id": current_user.id}, user_id=current_user.id)
         maybe_seal_block()
     except Exception:
         pass
@@ -411,6 +600,17 @@ def arbitration_hall():
         rpc_url=current_app.config.get("ETH_RPC_URL", ""),
         vote_threshold=int(current_app.config.get("DAO_VOTE_THRESHOLD", 1)),
     )
+
+
+# ── Real-time Unread Counts ──────────────────────────
+
+@api_bp.route("/api/unread-counts")
+@login_required
+def unread_counts():
+    from models import Notification, Message
+    notif = Notification.query.filter_by(user_id=current_user.id, is_read=False).count()
+    msg = Message.query.filter_by(receiver_id=current_user.id, is_read=False).count()
+    return jsonify({"ok": True, "notifications": notif, "messages": msg})
 
 
 # ── Chatbot ──────────────────────────────────────────
@@ -640,7 +840,21 @@ def _exec_tool(name, args):
 @api_bp.route("/chatbot")
 @login_required
 def chatbot():
-    return render_template("chatbot.html")
+    from models import ChatbotMessage
+
+    rows = (
+        ChatbotMessage.query
+        .filter_by(user_id=current_user.id)
+        .order_by(ChatbotMessage.created_at.desc(), ChatbotMessage.id.desc())
+        .limit(50)
+        .all()
+    )
+    chat_history = [
+        {"role": row.role, "content": row.content}
+        for row in reversed(rows)
+        if row.role in ("user", "assistant")
+    ]
+    return render_template("chatbot.html", chat_history=chat_history)
 
 
 @api_bp.route("/api/chatbot", methods=["POST"])
@@ -648,7 +862,8 @@ def chatbot():
 @login_required
 def chatbot_api():
     import json as _json
-    import requests as http_requests
+    from models import ChatbotMessage
+
     data = request.get_json(silent=True) or {}
     user_message = (data.get("message") or "").strip()
     history = data.get("history") or []
@@ -658,8 +873,19 @@ def chatbot_api():
     model = current_app.config.get("KIMI_MODEL", "moonshot-v1-8k")
     if not api_key:
         return jsonify({"ok": False, "error": "AI 服务未配置"}), 500
+    stored_history = (
+        ChatbotMessage.query
+        .filter_by(user_id=current_user.id)
+        .order_by(ChatbotMessage.created_at.desc(), ChatbotMessage.id.desc())
+        .limit(20)
+        .all()
+    )
+    history_source = [
+        {"role": row.role, "content": row.content}
+        for row in reversed(stored_history)
+    ] or history
     messages = [{"role": "system", "content": KIMI_SYSTEM_PROMPT}]
-    for h in history[-10:]:
+    for h in history_source[-10:]:
         if h.get("role") in ("user", "assistant") and h.get("content"):
             messages.append({"role": h["role"], "content": h["content"]})
     messages.append({"role": "user", "content": user_message})
@@ -714,6 +940,9 @@ def chatbot_api():
             assistant_msg = choice["message"]
 
         reply = assistant_msg.get("content") or "抱歉，我暂时无法回答这个问题。"
+        db.session.add(ChatbotMessage(user_id=current_user.id, role="user", content=user_message))
+        db.session.add(ChatbotMessage(user_id=current_user.id, role="assistant", content=reply))
+        db.session.commit()
         return jsonify({"ok": True, "reply": reply})
     except http_requests.Timeout:
         return jsonify({"ok": False, "error": "AI 响应超时，请稍后重试"}), 504

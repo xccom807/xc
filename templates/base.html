@@ -7,6 +7,8 @@
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}" />
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <style>.htmx-indicator{display:none}.htmx-request .htmx-indicator{display:inline-block}.htmx-request.htmx-indicator{display:inline-block}[hx-indicator] .htmx-indicator{display:none}[hx-indicator].htmx-request .htmx-indicator{display:inline-block}.fade-in{animation:fadeIn .3s ease-in}@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}</style>
     {% block head_extra %}{% endblock %}
   </head>
   <body>
@@ -42,22 +44,18 @@
               <a href="{{ url_for('dashboard') }}"><i class="fa-solid fa-gauge"></i> 仪表盘</a>
               <a href="{{ url_for('messages_inbox') }}" class="nav-notification">
                 <i class="fa-regular fa-envelope"></i> 私信
-                {% if unread_messages > 0 %}
-                  <span class="notification-badge">{{ unread_messages }}</span>
-                {% endif %}
+                <span class="notification-badge" data-badge="messages" {% if unread_messages == 0 %}style="display:none"{% endif %}>{{ unread_messages }}</span>
               </a>
               <a href="{{ url_for('profile_view', username=current_user.username) }}"><i class="fa-solid fa-user"></i> 我的资料</a>
               <a href="{{ url_for('notifications') }}" class="nav-notification">
                 <i class="fa-regular fa-bell"></i> 通知
-                {% if unread_notifications > 0 %}
-                  <span class="notification-badge">{{ unread_notifications }}</span>
-                {% endif %}
+                <span class="notification-badge" data-badge="notifications" {% if unread_notifications == 0 %}style="display:none"{% endif %}>{{ unread_notifications }}</span>
               </a>
               {% if current_user.reputation_score >= 80 %}
                 <a href="{{ url_for('arbitration_hall') }}"><i class="fa-solid fa-gavel"></i> 仲裁大厅</a>
               {% endif %}
             {% endif %}
-            <a href="{{ url_for('logout') }}"><i class="fa-solid fa-right-from-bracket"></i> 退出</a>
+            <a href="{{ url_for('logout') }}" data-logout-link><i class="fa-solid fa-right-from-bracket"></i> 退出</a>
           {% else %}
             <a href="{{ url_for('login') }}"><i class="fa-solid fa-right-to-bracket"></i> 登录</a>
             <a href="{{ url_for('signup') }}"><i class="fa-regular fa-id-card"></i> 注册</a>
@@ -71,7 +69,7 @@
         {% if messages %}
           <div class="flashes">
             {% for category, message in messages %}
-              <div class="flash {{ category }}">{{ message }}</div>
+              <div class="flash {{ category }}">{{ message|safe }}</div>
             {% endfor %}
           </div>
         {% endif %}
@@ -101,6 +99,69 @@
     (function () {
       const STORAGE_KEY = 'dh_wallet_connected';
       const POLL_INTERVAL = 30000; // 30s
+      const SHOULD_RUN_WALLET = {{ 'true' if current_user.is_authenticated and current_user.user_type != 'admin' else 'false' }};
+      const runtime = window.__dailyHelperRuntime = window.__dailyHelperRuntime || {};
+
+      function _clearWalletRuntime() {
+        if (runtime.walletPollId) {
+          clearInterval(runtime.walletPollId);
+          runtime.walletPollId = null;
+        }
+        if (runtime.ethereumAccountsChanged && typeof window.ethereum !== 'undefined' && typeof window.ethereum.removeListener === 'function') {
+          window.ethereum.removeListener('accountsChanged', runtime.ethereumAccountsChanged);
+        }
+        runtime.ethereumAccountsChanged = null;
+      }
+
+      function _clearBadgeRuntime() {
+        if (runtime.badgePollId) {
+          clearInterval(runtime.badgePollId);
+          runtime.badgePollId = null;
+        }
+      }
+
+      window.dailyHelperLogoutCleanup = function () {
+        _clearWalletRuntime();
+        _clearBadgeRuntime();
+        localStorage.removeItem(STORAGE_KEY);
+      };
+
+      _clearWalletRuntime();
+
+      if (runtime.logoutClickHandler) {
+        document.removeEventListener('click', runtime.logoutClickHandler, true);
+      }
+      runtime.logoutClickHandler = function (event) {
+        const link = event.target && event.target.closest ? event.target.closest('[data-logout-link]') : null;
+        if (link && typeof window.dailyHelperLogoutCleanup === 'function') {
+          window.dailyHelperLogoutCleanup();
+        }
+      };
+      document.addEventListener('click', runtime.logoutClickHandler, true);
+
+      if (runtime.pageHideHandler) {
+        window.removeEventListener('pagehide', runtime.pageHideHandler);
+      }
+      runtime.pageHideHandler = function () {
+        _clearWalletRuntime();
+        _clearBadgeRuntime();
+      };
+      window.addEventListener('pagehide', runtime.pageHideHandler);
+
+      if (runtime.pageShowHandler) {
+        window.removeEventListener('pageshow', runtime.pageShowHandler);
+      }
+      runtime.pageShowHandler = function (event) {
+        if (event.persisted) {
+          window.location.reload();
+        }
+      };
+      window.addEventListener('pageshow', runtime.pageShowHandler);
+
+      if (!SHOULD_RUN_WALLET) {
+        localStorage.removeItem(STORAGE_KEY);
+        return;
+      }
 
       /* ── UI helper ────────────────────────────────── */
       function _updateBtn(address) {
@@ -196,7 +257,7 @@
 
       /* ── 4. MetaMask event listeners ──────────────── */
       if (typeof window.ethereum !== 'undefined') {
-        window.ethereum.on('accountsChanged', function (accounts) {
+        runtime.ethereumAccountsChanged = function (accounts) {
           if (accounts.length) {
             _updateBtn(accounts[0]);
             localStorage.setItem(STORAGE_KEY, accounts[0]);
@@ -204,16 +265,67 @@
             _updateBtn(null);
             localStorage.removeItem(STORAGE_KEY);
           }
-        });
+        };
+        window.ethereum.on('accountsChanged', runtime.ethereumAccountsChanged);
       }
 
       /* ── Boot ────────────────────────────────────── */
-      document.addEventListener('DOMContentLoaded', function () {
+      function _bootWalletRuntime() {
+        if (runtime.walletPollId) {
+          clearInterval(runtime.walletPollId);
+        }
         _eagerConnect();
-        setInterval(_pollWalletStatus, POLL_INTERVAL);
-      });
+        _pollWalletStatus();
+        runtime.walletPollId = setInterval(_pollWalletStatus, POLL_INTERVAL);
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', _bootWalletRuntime, { once: true });
+      } else {
+        _bootWalletRuntime();
+      }
     })();
     </script>
+    {% if current_user.is_authenticated and current_user.user_type != 'admin' %}
+    <script>
+    (function(){
+      const runtime = window.__dailyHelperRuntime = window.__dailyHelperRuntime || {};
+      if (runtime.badgePollId) {
+        clearInterval(runtime.badgePollId);
+        runtime.badgePollId = null;
+      }
+      const BADGE_POLL = 15000;
+      function updateBadges(){
+        fetch('/api/unread-counts')
+          .then(r=>r.ok?r.json():null)
+          .then(d=>{
+            if(!d||!d.ok) return;
+            document.querySelectorAll('[data-badge="messages"]').forEach(el=>{
+              el.textContent=d.messages;
+              el.style.display=d.messages>0?'':'none';
+            });
+            document.querySelectorAll('[data-badge="notifications"]').forEach(el=>{
+              el.textContent=d.notifications;
+              el.style.display=d.notifications>0?'':'none';
+            });
+          })
+          .catch(()=>{});
+      }
+      function bootBadges(){
+        if (runtime.badgePollId) {
+          clearInterval(runtime.badgePollId);
+        }
+        updateBadges();
+        runtime.badgePollId=setInterval(updateBadges,BADGE_POLL);
+      }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded',bootBadges,{once:true});
+      } else {
+        bootBadges();
+      }
+    })();
+    </script>
+    {% endif %}
     {% block scripts %}{% endblock %}
   </body>
 </html>
