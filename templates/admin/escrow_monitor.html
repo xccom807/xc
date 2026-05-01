@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Escrow 监控 - 管理后台{% endblock %}
+{% block content %}
+<div class="admin-container">
+    <h1>Escrow 监控</h1>
+    <p class="description">监控所有付费且状态为「进行中」的任务，检查链上 Escrow 合约状态。超过合理时间仍在进行中的任务需要人工介入。</p>
+
+    {% if not chain_available %}
+    <div class="alert alert-warning">链上 RPC 不可用，无法读取 Escrow 合约状态。仅显示数据库数据。</div>
+    {% endif %}
+
+    {% if not tasks %}
+    <div class="alert alert-info">暂无进行中的付费任务。</div>
+    {% else %}
+    <table class="table">
+        <thead>
+            <tr>
+                <th>任务ID</th>
+                <th>标题</th>
+                <th>价格(ETH)</th>
+                <th>求助者</th>
+                <th>帮助者</th>
+                <th>数据库状态</th>
+                <th>链上状态</th>
+                <th>已过时长</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for t in tasks %}
+            <tr class="{{ 'stuck' if t.hours_since_created > 24 else '' }}">
+                <td>{{ t.id }}</td>
+                <td><a href="{{ url_for('features.request_detail', request_id=t.id) }}">{{ t.title[:30] }}</a></td>
+                <td>{{ t.price }}</td>
+                <td>{{ t.requester_id }}</td>
+                <td>{{ t.accepted_helper or '-' }}</td>
+                <td><span class="badge status-in-progress">进行中</span></td>
+                <td><span class="badge">{{ t.chain_status_label or '未知' }}</span></td>
+                <td>{{ t.hours_since_created }} 小时</td>
+                <td>
+                    <a href="{{ url_for('features.request_detail', request_id=t.id) }}" class="button small">查看详情</a>
+                    {% if t.accepted_helper %}
+                    <a href="{{ url_for('messages.messages_chat', user_id=t.accepted_helper) }}" class="button small">联系帮助者</a>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+</div>
+
+<style>
+.stuck { background-color: #fff3cd; }
+.stuck:hover { background-color: #ffe69c; }
+.admin-container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+.description { color: #666; margin-bottom: 20px; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: .8rem; }
+.status-in-progress { background: #17a2b8; color: #fff; }
+.alert { padding: 12px 16px; border-radius: 4px; margin-bottom: 16px; }
+.alert-warning { background: #fff3cd; border: 1px solid #ffc107; color: #856404; }
+.alert-info { background: #d1ecf1; border: 1px solid #0c5460; color: #0c5460; }
+.button.small { display: inline-block; padding: 4px 8px; font-size: .8rem; background: #007bff; color: #fff; border-radius: 4px; text-decoration: none; margin: 0 2px; }
+.button.small:hover { background: #0056b3; }
+</style>
+{% endblock %}

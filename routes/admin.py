@@ -5,6 +5,7 @@ import io
 
 from flask import Blueprint, render_template, redirect, url_for, flash, request, abort, jsonify, Response, current_app
 from flask_login import login_required, current_user
+from web3 import Web3
 
 from extensions import db
 from blockchain_service import append_statement, maybe_seal_block
@@ -376,3 +377,76 @@ def admin_sbt():
         else:
             flash(f"上链失败：{result.get('error', '未知错误')}", "error")
     return render_template("admin/sbt.html", tree=tree, entries=entries, result=result, sbt_address=current_app.config.get("SBT_CONTRACT_ADDRESS", ""))
+
+
+@admin_bp.route("/escrow-monitor")
+@login_required
+@admin_required
+def admin_escrow_monitor():
+    """List all paid in_progress tasks with their chain escrow state."""
+    from models import HelpRequest, HelpOffer
+    from web3_service import get_web3
+    from datetime import datetime, timezone
+
+    paid_in_progress = (
+        HelpRequest.query
+        .filter(
+            HelpRequest.status == "in_progress",
+            HelpRequest.price > 0,
+            HelpRequest.is_volunteer == False,  # noqa: E712
+        )
+        .order_by(HelpRequest.created_at.asc())
+        .all()
+    )
+
+    escrow_addr = current_app.config.get("ESCROW_CONTRACT_ADDRESS", "")
+    tasks = []
+    w3 = get_web3()
+    chain_available = w3 is not None and w3.is_connected() and escrow_addr
+
+    for req in paid_in_progress:
+        task_info = {
+            "id": req.id,
+            "title": req.title,
+            "price": req.price,
+            "created_at": req.created_at,
+            "requester_id": req.user_id,
+            "accepted_helper": None,
+            "chain_status": None,
+            "chain_status_label": "",
+            "hours_since_created": round((datetime.now(timezone.utc) - req.created_at.replace(tzinfo=timezone.utc)).total_seconds() / 3600, 1),
+        }
+        offer = HelpOffer.query.filter_by(request_id=req.id, status="accepted").first()
+        if offer:
+            task_info["accepted_helper"] = offer.helper_id
+
+        if chain_available:
+            try:
+                escrow_abi = [{
+                    "inputs": [{"internalType": "uint256", "name": "taskId", "type": "uint256"}],
+                    "name": "getEscrow",
+                    "outputs": [
+                        {"internalType": "address", "name": "requester", "type": "address"},
+                        {"internalType": "address", "name": "helper", "type": "address"},
+                        {"internalType": "uint256", "name": "amount", "type": "uint256"},
+                        {"internalType": "enum TaskEscrow.EscrowStatus", "name": "status", "type": "uint8"},
+                        {"internalType": "uint64", "name": "createdAt", "type": "uint64"},
+                        {"internalType": "uint64", "name": "resolvedAt", "type": "uint64"},
+                        {"internalType": "uint32", "name": "votesForHelper", "type": "uint32"},
+                        {"internalType": "uint32", "name": "votesForRequester", "type": "uint32"},
+                    ],
+                    "stateMutability": "view",
+                    "type": "function",
+                }]
+                c = w3.eth.contract(address=Web3.to_checksum_address(escrow_addr), abi=escrow_abi)
+                chain_data = c.functions.getEscrow(int(req.id)).call()
+                chain_status = int(chain_data[3])
+                status_labels = {0: "不存在", 1: "已锁定", 2: "已完成", 3: "争议中", 4: "已裁决"}
+                task_info["chain_status"] = chain_status
+                task_info["chain_status_label"] = status_labels.get(chain_status, f"未知({chain_status})")
+            except Exception:
+                task_info["chain_status_label"] = "读取失败"
+
+        tasks.append(task_info)
+
+    return render_template("admin/escrow_monitor.html", tasks=tasks, chain_available=chain_available)
