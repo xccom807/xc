@@ -3,7 +3,7 @@ import logging
 from flask import Flask, render_template, request
 from flask_login import current_user
 
-from extensions import db, login_manager, csrf
+from extensions import db, login_manager, csrf, migrate
 from web3_service import init_web3
 from blockchain_service import append_statement, maybe_seal_block
 
@@ -26,6 +26,7 @@ def create_app() -> Flask:
     db.init_app(app)
     login_manager.init_app(app)
     csrf.init_app(app)
+    migrate.init_app(app, db)
     # Initialize Web3 client (if ETH_RPC_URL set)
     app.extensions = getattr(app, "extensions", {})
     app.extensions["web3"] = init_web3(app.config.get("ETH_RPC_URL", ""))
