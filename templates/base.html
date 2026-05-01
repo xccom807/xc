@@ -98,7 +98,7 @@
     <script>
     (function () {
       const STORAGE_KEY = 'dh_wallet_connected';
-      const POLL_INTERVAL = 30000; // 30s
+      const POLL_INTERVAL = 30000;
       const SHOULD_RUN_WALLET = {{ 'true' if current_user.is_authenticated and current_user.user_type != 'admin' else 'false' }};
       const runtime = window.__dailyHelperRuntime = window.__dailyHelperRuntime || {};
 
@@ -139,25 +139,6 @@
       };
       document.addEventListener('click', runtime.logoutClickHandler, true);
 
-      if (runtime.pageHideHandler) {
-        window.removeEventListener('pagehide', runtime.pageHideHandler);
-      }
-      runtime.pageHideHandler = function () {
-        _clearWalletRuntime();
-        _clearBadgeRuntime();
-      };
-      window.addEventListener('pagehide', runtime.pageHideHandler);
-
-      if (runtime.pageShowHandler) {
-        window.removeEventListener('pageshow', runtime.pageShowHandler);
-      }
-      runtime.pageShowHandler = function (event) {
-        if (event.persisted) {
-          window.location.reload();
-        }
-      };
-      window.addEventListener('pageshow', runtime.pageShowHandler);
-
       if (!SHOULD_RUN_WALLET) {
         localStorage.removeItem(STORAGE_KEY);
         return;
@@ -177,7 +158,7 @@
         }
       }
 
-      /* ── 1. Click handler: full challenge-sign-verify ── */
+      /* ── Manual connect: challenge-sign-verify ────── */
       window.connectMetaMaskNav = async function () {
         if (typeof window.ethereum === 'undefined' || !window.ethereum.isMetaMask) {
           alert('未检测到 MetaMask，请先安装 MetaMask 浏览器扩展。');
@@ -225,21 +206,7 @@
         }
       };
 
-      /* ── 2. Eager connect: silent reconnect on page load ── */
-      async function _eagerConnect() {
-        if (!localStorage.getItem(STORAGE_KEY)) return;
-        if (typeof window.ethereum === 'undefined') return;
-        try {
-          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-          if (accounts && accounts.length) {
-            _updateBtn(accounts[0]);
-          } else {
-            localStorage.removeItem(STORAGE_KEY);
-          }
-        } catch (_) { /* silent */ }
-      }
-
-      /* ── 3. Periodic refresh: poll /wallet/me every 30s ── */
+      /* ── Periodic refresh: poll /wallet/me for display only ── */
       async function _pollWalletStatus() {
         try {
           const res = await fetch('/wallet/me');
@@ -248,20 +215,19 @@
           if (data.verified && data.address) {
             localStorage.setItem(STORAGE_KEY, data.address);
             _updateBtn(data.address);
-          } else {
-            localStorage.removeItem(STORAGE_KEY);
-            _updateBtn(null);
           }
+          // Never clear localStorage here — trust the user's manual connection
         } catch (_) { /* silent */ }
       }
 
-      /* ── 4. MetaMask event listeners ──────────────── */
+      /* ── MetaMask event listeners ──────────────────── */
       if (typeof window.ethereum !== 'undefined') {
         runtime.ethereumAccountsChanged = function (accounts) {
           if (accounts.length) {
             _updateBtn(accounts[0]);
             localStorage.setItem(STORAGE_KEY, accounts[0]);
           } else {
+            // MetaMask locked/disconnected — only then clear
             _updateBtn(null);
             localStorage.removeItem(STORAGE_KEY);
           }
@@ -269,12 +235,16 @@
         window.ethereum.on('accountsChanged', runtime.ethereumAccountsChanged);
       }
 
-      /* ── Boot ────────────────────────────────────── */
+      /* ── Boot: restore from localStorage and poll ─── */
       function _bootWalletRuntime() {
         if (runtime.walletPollId) {
           clearInterval(runtime.walletPollId);
         }
-        _eagerConnect();
+        // Restore from localStorage if previously connected
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          _updateBtn(saved);
+        }
         _pollWalletStatus();
         runtime.walletPollId = setInterval(_pollWalletStatus, POLL_INTERVAL);
       }

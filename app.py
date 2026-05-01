@@ -5,7 +5,6 @@ from flask_login import current_user
 
 from extensions import db, login_manager, csrf, migrate
 from web3_service import init_web3
-from blockchain_service import append_statement, maybe_seal_block
 
 
 def create_app() -> Flask:
@@ -31,36 +30,6 @@ def create_app() -> Flask:
     app.extensions = getattr(app, "extensions", {})
     app.extensions["web3"] = init_web3(app.config.get("ETH_RPC_URL", ""))
 
-    # Blockchain HTTP request logging
-    @app.before_request
-    def log_http_request():
-        # Skip logging for static files and certain endpoints
-        if (request.endpoint in ['static'] or
-            request.path.startswith('/static/') or
-            request.endpoint in ['api.web3_status', 'api.web3_balance', 'web3_status', 'web3_balance'] or
-            request.method in ['OPTIONS', 'HEAD']):
-            return
-
-        user_id = getattr(current_user, 'id', None) if current_user.is_authenticated else None
-
-        try:
-            append_statement(
-                kind="http_request",
-                payload={
-                    "method": request.method,
-                    "path": request.path,
-                    "query_string": request.query_string.decode('utf-8') if request.query_string else "",
-                    "user_agent": request.headers.get('User-Agent', '')[:200],  # Limit length
-                    "remote_addr": request.remote_addr,
-                    "referrer": request.headers.get('Referer', '')[:200],  # Limit length
-                },
-                user_id=user_id,
-            )
-            maybe_seal_block()
-        except Exception:  # noqa: BLE001
-            # Silently fail to not break the request flow
-            pass
-
     @app.after_request
     def add_no_store_for_dynamic_html(response):  # noqa: ANN001
         if response.content_type.startswith("text/html"):
@@ -82,8 +51,18 @@ def create_app() -> Flask:
         except Exception:
             return None
 
-    # Auto-create tables on first run
+    # Enable SQLite WAL mode so concurrent reads don't block writes,
+    # and busy_timeout so writers wait instead of immediately erroring.
+    # MUST register before first connection (before create_all) or old
+    # connections retain delete journal mode.
+    from sqlalchemy import event
     with app.app_context():
+        @event.listens_for(db.engine, "connect")
+        def _set_sqlite_pragmas(dbapi_connection, _connection_record):
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA busy_timeout=5000")
+            cursor.close()
         import models  # noqa: F401
         db.create_all()
 
