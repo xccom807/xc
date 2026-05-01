@@ -123,7 +123,7 @@
       window.dailyHelperLogoutCleanup = function () {
         _clearWalletRuntime();
         _clearBadgeRuntime();
-        localStorage.removeItem(STORAGE_KEY);
+        sessionStorage.removeItem(STORAGE_KEY);
       };
 
       _clearWalletRuntime();
@@ -140,7 +140,7 @@
       document.addEventListener('click', runtime.logoutClickHandler, true);
 
       if (!SHOULD_RUN_WALLET) {
-        localStorage.removeItem(STORAGE_KEY);
+        sessionStorage.removeItem(STORAGE_KEY);
         return;
       }
 
@@ -198,7 +198,7 @@
             return;
           }
 
-          localStorage.setItem(STORAGE_KEY, address);
+          sessionStorage.setItem(STORAGE_KEY, address);
           _updateBtn(address);
         } catch (error) {
           if (error && error.code === 4001) return;
@@ -213,10 +213,10 @@
           if (!res.ok) return;
           const data = await res.json();
           if (data.verified && data.address) {
-            localStorage.setItem(STORAGE_KEY, data.address);
+            sessionStorage.setItem(STORAGE_KEY, data.address);
             _updateBtn(data.address);
           }
-          // Never clear localStorage here — trust the user's manual connection
+          // Never clear sessionStorage here — trust the user's manual connection
         } catch (_) { /* silent */ }
       }
 
@@ -225,23 +225,23 @@
         runtime.ethereumAccountsChanged = function (accounts) {
           if (accounts.length) {
             _updateBtn(accounts[0]);
-            localStorage.setItem(STORAGE_KEY, accounts[0]);
+            sessionStorage.setItem(STORAGE_KEY, accounts[0]);
           } else {
             // MetaMask locked/disconnected — only then clear
             _updateBtn(null);
-            localStorage.removeItem(STORAGE_KEY);
+            sessionStorage.removeItem(STORAGE_KEY);
           }
         };
         window.ethereum.on('accountsChanged', runtime.ethereumAccountsChanged);
       }
 
-      /* ── Boot: restore from localStorage and poll ─── */
+      /* ── Boot: restore from sessionStorage and poll ─── */
       function _bootWalletRuntime() {
         if (runtime.walletPollId) {
           clearInterval(runtime.walletPollId);
         }
-        // Restore from localStorage if previously connected
-        const saved = localStorage.getItem(STORAGE_KEY);
+        // Restore from sessionStorage if previously connected
+        const saved = sessionStorage.getItem(STORAGE_KEY);
         if (saved) {
           _updateBtn(saved);
         }
