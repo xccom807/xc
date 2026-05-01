@@ -158,7 +158,7 @@ def seed():
         # 6. Payment (for completed req1)
         pay = Payment(
             request_id=req1.id, helper_id=bob.id, requester_id=alice.id,
-            helper_address="0x742d35Cc6634C0532925a3b844Bc9e7595f2bD18",
+            recipient_address="0x742d35Cc6634C0532925a3b844Bc9e7595f2bD18",
             amount=150.0,
             tx_hash="0xabc123def456789012345678901234567890abcdef1234567890abcdef12345678",
             status="paid",

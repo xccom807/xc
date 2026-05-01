@@ -346,7 +346,7 @@
                   </div>
                   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
                     <span class="muted">退款地址</span>
-                    <code style="font-size:.85rem;word-break:break-all;">{{ payment.helper_address }}</code>
+                    <code style="font-size:.85rem;word-break:break-all;">{{ payment.recipient_address }}</code>
                   </div>
                   <div class="flash info" style="margin-top:.5rem;">
                     <i class="fa-solid fa-circle-info"></i> 仲裁结果为退款，该任务不应显示为支付给帮助者。
@@ -359,7 +359,7 @@
                   </div>
                   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
                     <span class="muted">收款地址</span>
-                    <code style="font-size:.85rem;word-break:break-all;">{{ payment.helper_address }}</code>
+                    <code style="font-size:.85rem;word-break:break-all;">{{ payment.recipient_address }}</code>
                   </div>
                   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
                     <span class="muted">交易哈希</span>
@@ -380,7 +380,7 @@
                   </div>
                   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem;">
                     <span class="muted">收款地址</span>
-                    <code style="font-size:.85rem;word-break:break-all;">{{ payment.helper_address }}</code>
+                    <code style="font-size:.85rem;word-break:break-all;">{{ payment.recipient_address }}</code>
                   </div>
                   {% if is_requester %}
                   <p style="font-size:.9rem;margin-bottom:.75rem;">请在钱包中向上方地址转账，然后将交易哈希提交到下方。</p>
@@ -404,7 +404,7 @@
                   <form method="post" action="{{ url_for('submit_payment_address') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="request_id" value="{{ req.id }}">
-                    <div class="field"><label>您的以太坊收款地址</label><input type="text" name="helper_address" class="input" placeholder="0x..." required style="font-family:monospace;"></div>
+                    <div class="field"><label>您的以太坊收款地址</label><input type="text" name="recipient_address" class="input" placeholder="0x..." required style="font-family:monospace;"></div>
                     <button type="submit" class="btn" style="width:100%;" onclick="return confirm('确认提交该收款地址？')"><i class="fa-solid fa-paper-plane"></i> 提交收款地址</button>
                   </form>
                   {% elif is_requester %}

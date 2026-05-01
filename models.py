@@ -240,7 +240,7 @@ class Payment(db.Model):
     request_id = db.Column(db.Integer, db.ForeignKey("help_requests.id"), nullable=False, index=True)
     helper_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     requester_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    helper_address = db.Column(db.String(42), nullable=False)
+    recipient_address = db.Column(db.String(42), nullable=False)
     amount = db.Column(db.Float, nullable=False)
     tx_hash = db.Column(db.String(66), nullable=True)
     status = db.Column(db.String(20), nullable=False, default="address_submitted")  # address_submitted / paid / refunded

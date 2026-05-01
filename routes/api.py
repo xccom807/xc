@@ -287,14 +287,14 @@ def submit_payment_address():
         flash("您的账号已被列入黑名单，无法操作。", "error")
         return redirect(url_for("main.dashboard"))
     request_id = request.form.get("request_id", type=int)
-    helper_address = (request.form.get("helper_address") or "").strip()
-    if not request_id or not helper_address:
+    recipient_address = (request.form.get("recipient_address") or "").strip()
+    if not request_id or not recipient_address:
         flash("请填写收款地址。", "error")
         return redirect(url_for("features.request_detail", request_id=request_id or 0))
-    if not Web3.is_address(helper_address):
+    if not Web3.is_address(recipient_address):
         flash("无效的以太坊地址格式，请检查后重新提交。", "error")
         return redirect(url_for("features.request_detail", request_id=request_id))
-    helper_address = Web3.to_checksum_address(helper_address)
+    recipient_address = Web3.to_checksum_address(recipient_address)
     req_obj = HelpRequest.query.get_or_404(request_id)
     if req_obj.status != "completed":
         flash("任务尚未完成，无法提交收款地址。", "error")
@@ -310,11 +310,11 @@ def submit_payment_address():
     if existing:
         flash("收款地址已提交过，无需重复操作。", "error")
         return redirect(url_for("features.request_detail", request_id=request_id))
-    payment = Payment(request_id=req_obj.id, helper_id=current_user.id, requester_id=req_obj.user_id, helper_address=helper_address, amount=req_obj.price, status="address_submitted")
+    payment = Payment(request_id=req_obj.id, helper_id=current_user.id, requester_id=req_obj.user_id, recipient_address=recipient_address, amount=req_obj.price, status="address_submitted")
     db.session.add(payment)
     db.session.commit()
     try:
-        append_statement(kind="payment_address_submitted", payload={"request_id": req_obj.id, "helper_id": current_user.id, "helper_address": helper_address, "amount": req_obj.price}, user_id=current_user.id)
+        append_statement(kind="payment_address_submitted", payload={"request_id": req_obj.id, "helper_id": current_user.id, "recipient_address": recipient_address, "amount": req_obj.price}, user_id=current_user.id)
         maybe_seal_block()
     except Exception:  # noqa: BLE001
         pass
@@ -358,7 +358,7 @@ def record_payment():
     payment.paid_at = datetime.now(timezone.utc)
     db.session.commit()
     try:
-        append_statement(kind="payment_proof_uploaded", payload={"request_id": req_obj.id, "helper_id": payment.helper_id, "requester_id": current_user.id, "tx_hash": tx_hash, "amount": payment.amount, "helper_address": payment.helper_address}, user_id=current_user.id)
+        append_statement(kind="payment_proof_uploaded", payload={"request_id": req_obj.id, "helper_id": payment.helper_id, "requester_id": current_user.id, "tx_hash": tx_hash, "amount": payment.amount, "recipient_address": payment.recipient_address}, user_id=current_user.id)
         maybe_seal_block()
     except Exception:  # noqa: BLE001
         pass
@@ -529,14 +529,14 @@ def api_escrow_sync():
             if requester_wins and existing_pay:
                 existing_pay.status = "refunded"
                 existing_pay.tx_hash = tx_hash or existing_pay.tx_hash
-                existing_pay.helper_address = refund_addr
+                existing_pay.recipient_address = refund_addr
                 existing_pay.paid_at = datetime.now(timezone.utc)
             elif requester_wins and req.price:
                 pay = Payment(
                     request_id=req.id,
                     helper_id=offer.helper_id,
                     requester_id=req.user_id,
-                    helper_address=refund_addr,
+                    recipient_address=refund_addr,
                     amount=req.price,
                     tx_hash=tx_hash or None,
                     status="refunded",
@@ -546,14 +546,14 @@ def api_escrow_sync():
             elif helper_wins and existing_pay:
                 existing_pay.status = "paid"
                 existing_pay.tx_hash = tx_hash or existing_pay.tx_hash
-                existing_pay.helper_address = helper_addr
+                existing_pay.recipient_address = helper_addr
                 existing_pay.paid_at = existing_pay.paid_at or datetime.now(timezone.utc)
             elif helper_wins and req.price:
                 pay = Payment(
                     request_id=req.id,
                     helper_id=offer.helper_id,
                     requester_id=req.user_id,
-                    helper_address=helper_addr,
+                    recipient_address=helper_addr,
                     amount=req.price,
                     tx_hash=tx_hash or None,
                     status="paid",

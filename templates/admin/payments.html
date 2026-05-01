@@ -52,7 +52,7 @@
               {% endif %}
             </td>
             <td>{{ '%.4f'|format(p.amount) }} ETH</td>
-            <td style="font-family:monospace;font-size:.8rem;">{{ p.helper_address[:10] }}...{{ p.helper_address[-6:] }}</td>
+            <td style="font-family:monospace;font-size:.8rem;">{{ p.recipient_address[:10] }}...{{ p.recipient_address[-6:] }}</td>
             <td>
               {% if p.status == 'paid' %}
                 <span class="badge completed">已支付</span>
