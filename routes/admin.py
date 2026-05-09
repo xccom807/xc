@@ -391,7 +391,7 @@ def admin_escrow_monitor():
     paid_in_progress = (
         HelpRequest.query
         .filter(
-            HelpRequest.status == "in_progress",
+            HelpRequest.status.in_(("in_progress", "disputed")),
             HelpRequest.price > 0,
             HelpRequest.is_volunteer == False,  # noqa: E712
         )
@@ -411,6 +411,7 @@ def admin_escrow_monitor():
             "price": req.price,
             "created_at": req.created_at,
             "requester_id": req.user_id,
+            "db_status": req.status,
             "accepted_helper": None,
             "chain_status": None,
             "chain_status_label": "",
@@ -450,3 +451,82 @@ def admin_escrow_monitor():
         tasks.append(task_info)
 
     return render_template("admin/escrow_monitor.html", tasks=tasks, chain_available=chain_available)
+
+
+@admin_bp.post("/escrow-monitor/<int:task_id>/force-resolve")
+@login_required
+@admin_required
+def admin_force_resolve(task_id: int):
+    """Admin override: force-resolve a stuck disputed task."""
+    from datetime import datetime, timezone
+    from models import HelpRequest, HelpOffer, Payment, WalletLink
+
+    req = HelpRequest.query.get_or_404(task_id)
+    if req.status not in ("disputed", "in_progress"):
+        flash("只能对仲裁中或进行中的付费任务执行强制裁决。", "error")
+        return redirect(url_for("admin.admin_escrow_monitor"))
+    if not req.price or req.is_volunteer:
+        flash("只有付费任务可以执行强制裁决。", "error")
+        return redirect(url_for("admin.admin_escrow_monitor"))
+
+    outcome = (request.form.get("outcome") or "").strip()
+    if outcome not in ("pay_helper", "refund_requester"):
+        flash("请选择裁决结果（打款给帮助者 或 退款给求助者）。", "error")
+        return redirect(url_for("admin.admin_escrow_monitor"))
+
+    admin_reason = (request.form.get("admin_reason") or "").strip()
+    old_status = req.status
+    helper_wins = outcome == "pay_helper"
+
+    req.status = "completed" if helper_wins else "cancelled"
+    offer = HelpOffer.query.filter_by(request_id=req.id).filter(
+        HelpOffer.status.in_(("accepted", "completed"))
+    ).first()
+    if offer:
+        offer.status = "completed" if helper_wins else "rejected"
+
+    existing_pay = Payment.query.filter_by(request_id=req.id).first()
+    helper_wallet = WalletLink.query.filter_by(user_id=offer.helper_id).first() if offer else None
+    requester_wallet = WalletLink.query.filter_by(user_id=req.user_id).first()
+    recipient = (
+        (helper_wallet.address if helper_wallet else "0x0000000000000000000000000000000000000000")
+        if helper_wins
+        else (requester_wallet.address if requester_wallet else "0x0000000000000000000000000000000000000000")
+    )
+    if existing_pay:
+        existing_pay.status = "paid" if helper_wins else "refunded"
+        existing_pay.recipient_address = recipient
+        existing_pay.paid_at = datetime.now(timezone.utc)
+    else:
+        pay = Payment(
+            request_id=req.id,
+            helper_id=offer.helper_id if offer else 0,
+            requester_id=req.user_id,
+            recipient_address=recipient,
+            amount=req.price,
+            status="paid" if helper_wins else "refunded",
+            paid_at=datetime.now(timezone.utc),
+        )
+        db.session.add(pay)
+
+    db.session.commit()
+    try:
+        append_statement(
+            kind="admin_force_resolve",
+            payload={
+                "task_id": req.id, "outcome": outcome, "admin_reason": admin_reason,
+                "old_status": old_status, "new_status": req.status,
+                "admin_id": current_user.id,
+            },
+            user_id=current_user.id,
+        )
+        maybe_seal_block()
+    except Exception:
+        pass
+
+    notify(req.user_id, "force_resolved", f"管理员已对任务「{req.title[:30]}」执行强制裁决（{'打款给帮助者' if helper_wins else '退款给求助者'}）。", url_for("features.request_detail", request_id=req.id))
+    if offer:
+        notify(offer.helper_id, "force_resolved", f"管理员已对任务「{req.title[:30]}」执行强制裁决（{'打款给帮助者' if helper_wins else '退款给求助者'}）。", url_for("features.request_detail", request_id=req.id))
+    db.session.commit()
+    flash(f"已对任务 #{req.id} 执行强制裁决：{'打款给帮助者' if helper_wins else '退款给求助者'}。", "success")
+    return redirect(url_for("admin.admin_escrow_monitor"))

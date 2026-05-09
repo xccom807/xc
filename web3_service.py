@@ -24,6 +24,18 @@ def init_web3(rpc_url: str) -> Optional[Web3]:
 
 
 def get_web3() -> Optional[Web3]:
+    """Return the cached Web3 instance, or try to re-initialize if unavailable."""
+    global _w3
+    if _w3 is not None and _w3.is_connected():
+        return _w3
+    # Attempt reconnection
+    from flask import current_app
+    try:
+        rpc_url = current_app.config.get("ETH_RPC_URL", "")
+        if rpc_url:
+            init_web3(rpc_url)
+    except RuntimeError:
+        pass  # outside of application context
     return _w3
 
 

@@ -95,7 +95,19 @@ def login():
 @auth_bp.route("/logout")
 @login_required
 def logout():
+    from models import WalletLink
+
     uid = getattr(current_user, "id", None)
+    wallet_link = WalletLink.query.filter_by(user_id=uid).one_or_none()
+    if wallet_link is not None:
+        removed_address = wallet_link.address
+        db.session.delete(wallet_link)
+        db.session.commit()
+        try:
+            append_statement(kind="wallet_unlinked", payload={"address": removed_address}, user_id=uid)
+        except Exception:  # noqa: BLE001
+            pass
+
     logout_user()
     session.clear()
     try:

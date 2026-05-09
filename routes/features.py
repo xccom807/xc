@@ -2,17 +2,20 @@
 
 import math
 import json
+import os
+import time
 from datetime import datetime, timedelta, timezone
+from werkzeug.utils import secure_filename
 
 from flask import Blueprint, render_template, redirect, url_for, flash, request, abort, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy import func, or_, and_
 from web3 import Web3
 
-from extensions import db
+from extensions import db, csrf
 from blockchain_service import append_statement, maybe_seal_block
 from web3_service import submit_anchor_transaction
-from routes.helpers import notify
+from routes.helpers import notify, notify_gold_holders
 
 features_bp = Blueprint("features", __name__)
 
@@ -456,6 +459,144 @@ def cancel_request(request_id: int):
 
         flash("求助已取消。", "success")
     return redirect(url_for("features.request_help"))
+
+
+@features_bp.route("/requests/<int:request_id>/submit-evidence", methods=["POST"])
+@login_required
+def submit_evidence(request_id: int):
+    """Helper submits completion evidence for a task."""
+    from models import HelpRequest, HelpOffer, DisputeEvidence
+
+    req = HelpRequest.query.get_or_404(request_id)
+    if getattr(current_user, "is_blacklisted", False):
+        flash("您的账号已被列入黑名单，无法操作。", "error")
+        return redirect(url_for("features.request_detail", request_id=req.id))
+
+    offer = HelpOffer.query.filter_by(
+        request_id=req.id, helper_id=current_user.id
+    ).filter(HelpOffer.status.in_(("accepted", "completed"))).first()
+    if not offer:
+        flash("只有该任务的已接受帮助者才能提交证据。", "error")
+        return redirect(url_for("features.request_detail", request_id=req.id))
+    if req.status not in ("in_progress", "disputed"):
+        flash("该任务当前状态无法提交证据。", "error")
+        return redirect(url_for("features.request_detail", request_id=req.id))
+
+    content = (request.form.get("content") or "").strip()
+    if not content:
+        flash("请填写证据说明。", "error")
+        return redirect(url_for("features.request_detail", request_id=req.id))
+
+    file_path = None
+    uploaded = request.files.get("evidence_file")
+    if uploaded and uploaded.filename:
+        upload_dir = os.path.join("static", "uploads", "evidence")
+        os.makedirs(upload_dir, exist_ok=True)
+        safe_name = f"{request_id}_{current_user.id}_{int(time.time())}_{secure_filename(uploaded.filename)}"
+        file_path = os.path.join(upload_dir, safe_name)
+        uploaded.save(file_path)
+
+    evidence = DisputeEvidence(
+        task_id=req.id,
+        user_id=current_user.id,
+        content=content,
+        file_path=file_path,
+    )
+    db.session.add(evidence)
+    db.session.commit()
+
+    try:
+        append_statement(
+            kind="evidence_submitted",
+            payload={"request_id": req.id, "evidence_id": evidence.id, "user_id": current_user.id},
+            user_id=current_user.id,
+        )
+        maybe_seal_block()
+    except Exception:
+        pass
+
+    notify(req.user_id, "evidence_submitted", f"帮助者已提交「{req.title[:30]}」的完成证据。", url_for("features.request_detail", request_id=req.id))
+    db.session.commit()
+    flash("证据已提交。", "success")
+    return redirect(url_for("features.request_detail", request_id=req.id))
+
+
+@features_bp.route("/requests/<int:request_id>/raise-dispute", methods=["POST"])
+@csrf.exempt
+@login_required
+def raise_dispute(request_id: int):
+    """Server-side dispute initiation — stores evidence, then redirects to on-chain action."""
+    from models import HelpRequest, HelpOffer, DisputeEvidence
+
+    req = HelpRequest.query.get_or_404(request_id)
+    if getattr(current_user, "is_blacklisted", False):
+        msg = "您的账号已被列入黑名单，无法操作。"
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify({"error": msg}), 403
+        flash(msg, "error")
+        return redirect(url_for("features.request_detail", request_id=req.id))
+
+    def _fail(msg, status=400):
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify({"error": msg}), status
+        flash(msg, "error")
+        return redirect(url_for("features.request_detail", request_id=req.id))
+
+    if req.status != "in_progress":
+        return _fail("该任务当前状态无法发起仲裁。")
+    if not req.price or req.is_volunteer:
+        return _fail("只有付费任务可以发起仲裁。")
+
+    is_party = current_user.id == req.user_id
+    if not is_party:
+        offer = HelpOffer.query.filter_by(
+            request_id=req.id, helper_id=current_user.id
+        ).filter(HelpOffer.status.in_(("accepted", "completed"))).first()
+        if offer:
+            is_party = True
+    if not is_party:
+        return _fail("只有任务当事人才能发起仲裁。", 403)
+
+    reason = (request.form.get("reason") or "").strip()
+    if not reason:
+        return _fail("请填写仲裁理由。")
+
+    file_path = None
+    uploaded = request.files.get("evidence_file")
+    if uploaded and uploaded.filename:
+        upload_dir = os.path.join("static", "uploads", "evidence")
+        os.makedirs(upload_dir, exist_ok=True)
+        safe_name = f"dispute_{request_id}_{current_user.id}_{int(time.time())}_{secure_filename(uploaded.filename)}"
+        file_path = os.path.join(upload_dir, safe_name)
+        uploaded.save(file_path)
+
+    evidence = DisputeEvidence(
+        task_id=req.id,
+        user_id=current_user.id,
+        content=f"[仲裁申请] {reason}",
+        file_path=file_path,
+    )
+    db.session.add(evidence)
+    db.session.commit()
+
+    try:
+        append_statement(
+            kind="dispute_evidence_filed",
+            payload={"request_id": req.id, "evidence_id": evidence.id, "user_id": current_user.id},
+            user_id=current_user.id,
+        )
+        maybe_seal_block()
+    except Exception:
+        pass
+
+    notify_gold_holders(req.id, req.title, exclude_user_id=current_user.id)
+    db.session.commit()
+
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return jsonify({"success": True, "evidence_id": evidence.id})
+
+    flash("仲裁理由已记录。请确认 MetaMask 以完成链上仲裁发起。", "success")
+    return redirect(url_for("features.request_detail", request_id=req.id))
 
 
 @features_bp.route("/requests/<int:request_id>/edit", methods=["GET", "POST"])

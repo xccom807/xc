@@ -287,3 +287,21 @@ class Message(db.Model):
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<Message {self.id} {self.sender_id}->{self.receiver_id}>"
+
+
+class DisputeEvidence(db.Model):
+    """Off-chain evidence for disputed tasks — text + optional file attachment."""
+    __tablename__ = "dispute_evidences"
+
+    id = db.Column(db.Integer, primary_key=True)
+    task_id = db.Column(db.Integer, db.ForeignKey("help_requests.id"), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    file_path = db.Column(db.String(500), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    user = db.relationship("User", backref="dispute_evidences")
+    request = db.relationship("HelpRequest", backref="dispute_evidences")
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<DisputeEvidence {self.id} task={self.task_id} user={self.user_id}>"

@@ -14,7 +14,7 @@ from web3 import Web3
 from extensions import db, csrf
 from blockchain_service import append_statement, maybe_seal_block
 from web3_service import get_web3, get_signer_address, submit_anchor_transaction
-from routes.helpers import notify
+from routes.helpers import notify, notify_gold_holders
 
 api_bp = Blueprint("api", __name__)
 
@@ -452,11 +452,15 @@ def api_escrow_sync():
             chain_status = int(chain_data[3])
             chain_requester_address = Web3.to_checksum_address(chain_data[0])
             chain_helper_address = Web3.to_checksum_address(chain_data[1])
-            requester_wallet = WalletLink.query.filter_by(user_id=req.user_id).first()
-            if not requester_wallet or not requester_wallet.verified_at:
-                return jsonify({"error": "requester has no verified wallet for escrow verification"}), 409
-            if requester_wallet.address.lower() != chain_requester_address.lower():
-                return jsonify({"error": "escrow requester address does not match task requester wallet"}), 409
+            # Only require requester wallet verification for lock action.
+            # For release/dispute/resolve the escrow already exists on-chain,
+            # so the backend should follow the chain as source of truth.
+            if action == "lock":
+                requester_wallet = WalletLink.query.filter_by(user_id=req.user_id).first()
+                if not requester_wallet or not requester_wallet.verified_at:
+                    return jsonify({"error": "requester has no verified wallet for escrow verification"}), 409
+                if requester_wallet.address.lower() != chain_requester_address.lower():
+                    return jsonify({"error": "escrow requester address does not match task requester wallet"}), 409
             try:
                 expected_amount_wei = int(Web3.to_wei(Decimal(str(req.price)), "ether"))
             except (InvalidOperation, ValueError) as e:
@@ -566,6 +570,12 @@ def api_escrow_sync():
         maybe_seal_block()
     except Exception:
         pass
+    if action == "dispute":
+        try:
+            notify_gold_holders(req.id, req.title, exclude_user_id=current_user.id)
+            db.session.commit()
+        except Exception:
+            pass
     return jsonify({"success": True, "new_status": new_status})
 
 
@@ -587,13 +597,21 @@ def api_contracts_config():
 @api_bp.route("/arbitration")
 @login_required
 def arbitration_hall():
-    from models import HelpRequest
+    from models import HelpRequest, DisputeEvidence
     if current_user.reputation_score < 80:
         flash("仲裁大厅需要信誉分达到 80（金牌）才能进入。", "info")
         return redirect(url_for("main.dashboard"))
     disputed = HelpRequest.query.filter_by(status="disputed").order_by(HelpRequest.created_at.desc()).all()
+    evidence_map = {}
+    for r in disputed:
+        evidence_map[r.id] = (
+            DisputeEvidence.query
+            .filter_by(task_id=r.id)
+            .order_by(DisputeEvidence.created_at.asc())
+            .all()
+        )
     return render_template(
-        "features/arbitration.html", disputed=disputed,
+        "features/arbitration.html", disputed=disputed, evidence_map=evidence_map,
         escrow_address=current_app.config.get("ESCROW_CONTRACT_ADDRESS", ""),
         sbt_address=current_app.config.get("SBT_CONTRACT_ADDRESS", ""),
         chain_id=int(current_app.config.get("ETH_CHAIN_ID", 11155111)),

@@ -24,3 +24,24 @@ def notify(user_id: int, kind: str, message: str, link: str | None = None) -> No
     """Create an in-app notification for a user."""
     n = Notification(user_id=user_id, kind=kind, message=message, link=link)
     db.session.add(n)
+
+
+def notify_gold_holders(task_id: int, title: str, exclude_user_id: int | None = None) -> None:
+    """Notify all Gold-tier users (reputation >= 80) about a new dispute."""
+    from flask import url_for
+    from models import User
+
+    gold_users = User.query.filter(
+        User.reputation_score >= 80,
+        User.user_type != "admin",
+        User.is_blacklisted.is_(False),
+    )
+    if exclude_user_id:
+        gold_users = gold_users.filter(User.id != exclude_user_id)
+    for u in gold_users.all():
+        notify(
+            u.id,
+            "dispute_raised",
+            f"新争议需要仲裁投票：任务「{title[:40]}」",
+            url_for("api.arbitration_hall"),
+        )

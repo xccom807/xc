@@ -35,6 +35,28 @@
 
       <p>{{ req.description|replace('\n', '<br>')|safe }}</p>
 
+      {# ── 证据展示（仲裁中或有证据时显示）── #}
+      {% set evidence_list = req.dispute_evidences|list %}
+      {% if evidence_list %}
+        <div style="margin-top:1rem;padding:.75rem;background:var(--panel-color);border-radius:var(--border-radius);border:1px solid var(--border-color);">
+          <strong style="font-size:.9rem;"><i class="fa-solid fa-file-lines"></i> 任务证据（{{ evidence_list|length }} 条）</strong>
+          {% for ev in evidence_list|sort(attribute='created_at') %}
+            <div style="margin-top:.5rem;padding:.5rem;border-left:3px solid var(--accent-color);background:var(--bg-color);border-radius:0 var(--border-radius) var(--border-radius) 0;">
+              <div style="font-size:.85rem;display:flex;justify-content:space-between;flex-wrap:wrap;gap:.25rem;">
+                <strong>{{ ev.user.username }}</strong>
+                <span class="muted">{{ ev.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+              </div>
+              <div style="margin-top:.25rem;font-size:.9rem;white-space:pre-wrap;">{{ ev.content }}</div>
+              {% if ev.file_path %}
+                <div style="margin-top:.25rem;">
+                  <a href="/{{ ev.file_path }}" target="_blank" class="btn btn-small secondary"><i class="fa-solid fa-paperclip"></i> 查看附件</a>
+                </div>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
       {# 求助者操作：编辑和取消 #}
       {% if is_requester and req.status == 'open' %}
         <div class="actions" style="margin-top:1rem; display:flex; gap:.75rem;">
@@ -189,12 +211,41 @@
             </div>
           </div>
         {% endif %}
+      {% endif %}
 
-        {# 帮助者也可以发起仲裁 #}
+        {# 帮助者提交证据 + 发起仲裁 #}
         {% if req.status == 'in_progress' and is_helper and req.price and not req.is_volunteer %}
           <div class="section" style="margin-top:1rem;">
             <h3>任务争议</h3>
             <p class="muted">如果您认为任务存在纠纷，可以发起仲裁，由金牌用户投票裁决。</p>
+
+            {# 提交完成证据 #}
+            <details style="margin-top:.5rem;">
+              <summary style="cursor:pointer;color:var(--accent-color);"><i class="fa-solid fa-upload"></i> 提交完成证据</summary>
+              <form method="post" action="{{ url_for('features.submit_evidence', request_id=req.id) }}" enctype="multipart/form-data" style="margin-top:.5rem;padding:.75rem;background:var(--panel-color);border-radius:var(--border-radius);">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <label style="font-size:.9rem;">证据说明 <span class="muted">（必填）</span></label>
+                <textarea name="content" rows="3" placeholder="描述您已完成的工作、遇到的问题等..." required style="width:100%;margin-top:.25rem;"></textarea>
+                <label style="font-size:.9rem;display:block;margin-top:.5rem;">附件截图（可选）</label>
+                <input type="file" name="evidence_file" accept="image/*,.pdf,.txt,.doc,.docx" style="margin-top:.25rem;">
+                <button type="submit" class="btn btn-small" style="margin-top:.5rem;"><i class="fa-solid fa-paper-plane"></i> 提交证据</button>
+              </form>
+            </details>
+
+            {# 发起仲裁（带理由） #}
+            <details style="margin-top:.5rem;">
+              <summary style="cursor:pointer;color:var(--danger-color);"><i class="fa-solid fa-gavel"></i> 发起仲裁申请</summary>
+              <form method="post" action="{{ url_for('features.raise_dispute', request_id=req.id) }}" enctype="multipart/form-data" style="margin-top:.5rem;padding:.75rem;background:var(--panel-color);border-radius:var(--border-radius);">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <p class="muted" style="font-size:.85rem;">提交仲裁理由后，需要在 MetaMask 中确认链上交易才能正式发起仲裁。</p>
+                <label style="font-size:.9rem;">仲裁理由 <span class="muted">（必填）</span></label>
+                <textarea name="reason" rows="3" placeholder="说明为什么需要仲裁..." required style="width:100%;margin-top:.25rem;"></textarea>
+                <label style="font-size:.9rem;display:block;margin-top:.5rem;">附件证据（可选）</label>
+                <input type="file" name="evidence_file" accept="image/*,.pdf,.txt,.doc,.docx" style="margin-top:.25rem;">
+                <button type="submit" class="btn danger" style="margin-top:.5rem;"><i class="fa-solid fa-gavel"></i> 提交仲裁理由</button>
+              </form>
+            </details>
+
             <div id="helper-dispute-{{ req.id }}" style="margin-top:.5rem;">
               <span class="muted">检查 Escrow 状态...</span>
             </div>
@@ -216,7 +267,7 @@
                   const d = await c.getEscrow({{ req.id }});
                   const s = Number(d[3]);
                   if (s === 1) {
-                    el.innerHTML = '<button class="btn danger" onclick="raiseDispute({{ req.id }})"><i class="fa-solid fa-gavel"></i> 发起仲裁</button>';
+                    el.innerHTML = '<p class="muted" style="margin-top:.5rem;">提交仲裁理由后，请点击下方按钮完成链上仲裁发起：</p><button class="btn danger" onclick="raiseDispute({{ req.id }})"><i class="fa-solid fa-gavel"></i> 链上发起仲裁（需 MetaMask）</button>';
                   } else if (s === 3) {
                     el.innerHTML = '<span class="badge rejected">⚖️ 仲裁已发起，等待裁决</span>';
                   } else if (s === 0) {
@@ -231,7 +282,6 @@
             </script>
           </div>
         {% endif %}
-      {% endif %}
 
       {# Payment Section — auto-detect Escrow vs manual #}
       {% if req.price and not req.is_volunteer and (req.status == 'completed' or (payment and payment.status == 'refunded')) %}

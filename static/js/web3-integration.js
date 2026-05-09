@@ -294,7 +294,35 @@ async function releaseEscrow(taskId) {
 
 async function raiseDispute(taskId) {
   try {
-    if (!confirm("确认对此任务发起仲裁？\n争议将交由金牌用户投票裁决。")) return false;
+    const reason = prompt("请输入仲裁理由（必填）：\n说明为什么发起仲裁，这将作为证据在仲裁大厅展示。");
+    if (!reason || !reason.trim()) {
+      alert("请填写仲裁理由后再发起仲裁。");
+      return false;
+    }
+
+    // 先提交证据到后端
+    try {
+      const formData = new FormData();
+      formData.append("reason", reason.trim());
+      const evidenceResp = await fetch(`/requests/${taskId}/raise-dispute`, {
+        method: "POST",
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+        body: formData,
+      });
+      if (!evidenceResp.ok) {
+        const errData = await evidenceResp.json().catch(() => ({}));
+        if (errData.error) {
+          alert(`证据提交失败：${errData.error}`);
+          return false;
+        }
+      }
+    } catch (evidenceErr) {
+      console.error("Evidence submission failed:", evidenceErr);
+      alert(`证据提交失败：${evidenceErr.message}\n请重试或联系管理员。`);
+      return false;
+    }
+
+    if (!confirm("证据已记录。\n\n现在将在链上发起仲裁交易。确认继续？")) return false;
 
     const { signer, contracts } = await getSignerAndContracts();
     if (!contracts.escrow) {

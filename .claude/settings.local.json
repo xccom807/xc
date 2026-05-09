@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install *)",
+      "Bash(export FLASK_APP=app.py)",
+      "Bash(flask db *)",
+      "Bash(python *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(export PYTHONIOENCODING=utf-8)",
+      "Bash(git commit *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:5000/)",
+      "Bash(curl -s http://127.0.0.1:5000/login -o /dev/null -w \"Login: %{http_code}\\\\n\")",
+      "Bash(curl -s http://127.0.0.1:5000/login -o /dev/null -w \"Login2: %{http_code}\\\\n\")",
+      "Bash(curl -s -c /tmp/cjar -b /tmp/cjar http://127.0.0.1:5000/login -o /dev/null -w \"Login3: %{http_code}\\\\n\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:5000/login)",
+      "WebFetch(domain:github.com)",
+      "Bash(npx skills *)",
+      "Bash(rm /d/bise/xccom/fill_thesis.py /d/bise/xccom/fill_chapters_1_3.py /d/bise/xccom/fix_appendix.py /d/bise/xccom/fix_references.py /d/bise/xccom/fix_toc.py /d/bise/xccom/gen_figures.py /d/bise/xccom/insert_figures_tables.py /d/bise/xccom/run_migration.bat /d/bise/xccom/run_block1.bat)",
+      "Bash(rm -rf /d/bise/xccom/docs /d/bise/xccom/figures)",
+      "Bash(npm i *)",
+      "Bash(npm info *)",
+      "Bash(claude *)",
+      "WebSearch"
+    ]
+  }
+}
